@@ -14,6 +14,20 @@ function sanitizeIdent(name, fallbackPrefix) {
   return s.toLowerCase();
 }
 
+function detectColumnType(values) {
+  if (!values.length) return 'TEXT';
+  if (values.every(v => /^(true|false)$/i.test(String(v).trim()))) return 'BOOLEAN';
+  if (values.every(v => !isNaN(Number(v)))) return 'DOUBLE PRECISION';
+  return 'TEXT';
+}
+
+function toColumnValue(v, type) {
+  if (v === '' || v === null || v === undefined) return null;
+  if (type === 'DOUBLE PRECISION') return Number(v);
+  if (type === 'BOOLEAN') return /^true$/i.test(String(v).trim());
+  return String(v);
+}
+
 router.get('/datasources', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
@@ -49,8 +63,7 @@ router.post('/datasources/upload', requireAuth, upload.single('file'), async (re
   const cols = Object.keys(parsed.data[0]);
   const colDefs = cols.map(c => {
     const vals = parsed.data.map(r => r[c]).filter(v => v !== '' && v !== null && v !== undefined);
-    const allNum = vals.length > 0 && vals.every(v => v !== '' && !isNaN(Number(v)));
-    return { name: c, type: allNum ? 'DOUBLE PRECISION' : 'TEXT' };
+    return { name: c, type: detectColumnType(vals) };
   });
 
   const schema = userSchema(req.user.id);
@@ -65,11 +78,7 @@ router.post('/datasources/upload', requireAuth, upload.single('file'), async (re
     const placeholders = colDefs.map((_, i) => `$${i + 1}`).join(',');
     const insertSql = `INSERT INTO "${schema}"."${tableName}" VALUES (${placeholders})`;
     for (const row of parsed.data) {
-      const values = colDefs.map(c => {
-        const v = row[c.name];
-        if (v === '' || v === null || v === undefined) return null;
-        return c.type === 'DOUBLE PRECISION' ? Number(v) : String(v);
-      });
+      const values = colDefs.map(c => toColumnValue(row[c.name], c.type));
       await client.query(insertSql, values);
     }
 
