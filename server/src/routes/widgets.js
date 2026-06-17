@@ -3,11 +3,12 @@ const { pool } = require('../db');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
+const VALID_AGGS = ['count', 'sum', 'avg', 'min', 'max'];
 
 router.get('/widgets', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, name, chart_type, sql_text, label_col, val_col, created_at FROM widgets WHERE user_id = $1 ORDER BY created_at ASC',
+      'SELECT id, name, chart_type, sql_text, label_col, val_col, agg, created_at FROM widgets WHERE user_id = $1 ORDER BY created_at ASC',
       [req.user.id]
     );
     res.json({ widgets: result.rows });
@@ -17,16 +18,17 @@ router.get('/widgets', requireAuth, async (req, res) => {
 });
 
 router.post('/widgets', requireAuth, async (req, res) => {
-  const { name, chartType, sqlText, labelCol, valCol } = req.body || {};
+  const { name, chartType, sqlText, labelCol, valCol, agg } = req.body || {};
   if (!name || !chartType || !sqlText) {
     return res.status(400).json({ error: 'name, chartType, and sqlText are required' });
   }
+  const aggValue = VALID_AGGS.includes(agg) ? agg : 'count';
   try {
     const result = await pool.query(
-      `INSERT INTO widgets (user_id, name, chart_type, sql_text, label_col, val_col)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, name, chart_type, sql_text, label_col, val_col, created_at`,
-      [req.user.id, name, chartType, sqlText, labelCol || null, valCol || null]
+      `INSERT INTO widgets (user_id, name, chart_type, sql_text, label_col, val_col, agg)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, name, chart_type, sql_text, label_col, val_col, agg, created_at`,
+      [req.user.id, name, chartType, sqlText, labelCol || null, valCol || null, aggValue]
     );
     res.status(201).json({ widget: result.rows[0] });
   } catch (err) {
@@ -40,7 +42,7 @@ router.patch('/widgets/:id', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
       `UPDATE widgets SET name = $1 WHERE id = $2 AND user_id = $3
-       RETURNING id, name, chart_type, sql_text, label_col, val_col, created_at`,
+       RETURNING id, name, chart_type, sql_text, label_col, val_col, agg, created_at`,
       [name.trim(), req.params.id, req.user.id]
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Widget not found' });

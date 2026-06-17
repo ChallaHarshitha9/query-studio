@@ -219,12 +219,50 @@ export function selChartType(t, evt) {
   evt.currentTarget.classList.add('sel');
 }
 
+// Whether every value of `colName` in the current results looks numeric
+// ("metric") vs. categorical ("dimension") — drives the Smart Mode defaults.
+function detectColumnType(colName) {
+  if (!S.curData.length || !colName) return 'dimension';
+  const allNumeric = S.curData.every(row => {
+    const v = row[colName];
+    return v !== null && v !== '' && !isNaN(Number(v));
+  });
+  return allNumeric ? 'metric' : 'dimension';
+}
+
+export function handleValueChange() {
+  const smart = document.getElementById('smart-mode')?.checked;
+  if (!smart) return;
+  const col = document.getElementById('m-value')?.value;
+  const aggEl = document.getElementById('m-agg');
+  if (!col || !aggEl) return;
+  if (detectColumnType(col) === 'metric') {
+    aggEl.innerHTML = `<option value="sum">SUM</option><option value="avg">AVG</option><option value="min">MIN</option><option value="max">MAX</option><option value="count">COUNT</option>`;
+    aggEl.value = 'sum';
+  } else {
+    aggEl.innerHTML = `<option value="count">COUNT</option>`;
+    aggEl.value = 'count';
+  }
+}
+
+export function handleLabelChange() {
+  const smart = document.getElementById('smart-mode')?.checked;
+  if (!smart) return;
+  const col = document.getElementById('m-label')?.value;
+  if (!col) return;
+  const unique = new Set(S.curData.map(r => r[col]));
+  if (unique.size > 15) {
+    alert('That column has ' + unique.size + ' distinct values — consider a table view or a column with fewer categories for a readable chart.');
+  }
+}
+
 export async function saveWidget() {
-  const name = document.getElementById('m-name')?.value || 'Widget ' + (S.widgets.length + 1);
+  const name = document.getElementById('m-name')?.value?.trim() || 'Widget ' + new Date().toLocaleTimeString();
   const labelCol = document.getElementById('m-label')?.value || S.curCols[0];
   const valCol = document.getElementById('m-value')?.value || S.curCols[1] || S.curCols[0];
+  const agg = document.getElementById('m-agg')?.value || 'count';
   try {
-    await api.createWidget({ name, chartType: S.selChart, sqlText: S.sqlText, labelCol, valCol });
+    await api.createWidget({ name, chartType: S.selChart, sqlText: S.sqlText, labelCol, valCol, agg });
     S.modal = null;
     // Widget now owns this query — clear the editor so the builder starts fresh.
     S.sqlText = ''; S.curData = []; S.curCols = [];

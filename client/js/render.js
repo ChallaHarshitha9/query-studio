@@ -246,14 +246,23 @@ function renderTableW(w) {
 }
 function renderKPIW(w) {
   const data = w.data || [];
-  const vals = data.map(x => Number(x[w.val_col]) || 0);
-  const total = vals.reduce((a, b) => a + b, 0);
-  const avg = vals.length ? (total / vals.length).toFixed(1) : 0;
+  const agg = w.agg || 'count';
+  const vals = data.map(x => Number(x[w.val_col])).filter(v => !isNaN(v));
+  const result = aggregate(agg, vals, data.length);
+  const display = Number.isInteger(result) ? result.toLocaleString() : result.toFixed(2);
   return `<div class="kpi-card">
-    <div class="kpi-label">${escHTML(w.val_col || '')}</div>
-    <div class="kpi-value">${total.toLocaleString()}</div>
-    <div class="kpi-sub">avg ${avg} · ${data.length} rows</div>
+    <div class="kpi-label">${agg.toUpperCase()} (${escHTML(w.val_col || '')})</div>
+    <div class="kpi-value">${display}</div>
+    <div class="kpi-sub">${data.length} rows</div>
   </div>`;
+}
+
+function aggregate(agg, numericValues, rowCount) {
+  if (agg === 'sum') return numericValues.reduce((a, b) => a + b, 0);
+  if (agg === 'avg') return numericValues.length ? numericValues.reduce((a, b) => a + b, 0) / numericValues.length : 0;
+  if (agg === 'min') return numericValues.length ? Math.min(...numericValues) : 0;
+  if (agg === 'max') return numericValues.length ? Math.max(...numericValues) : 0;
+  return rowCount; // count
 }
 
 /* ── DATA SOURCES ───────────────────────────────────── */
@@ -305,6 +314,10 @@ function renderModal() {
       <div class="field-g"><label class="flabel">Widget name</label>
         <input class="finput" id="m-name" placeholder="e.g. Alerts by severity" autofocus/>
       </div>
+      <div class="field-g" style="display:flex;align-items:center;gap:8px">
+        <label class="flabel" style="margin-bottom:0">Smart Mode</label>
+        <input type="checkbox" id="smart-mode" checked style="width:15px;height:15px"/>
+      </div>
       <div class="field-g">
         <label class="flabel">Chart type</label>
         <div class="chart-grid">
@@ -313,10 +326,19 @@ function renderModal() {
         </div>
       </div>
       <div class="field-g"><label class="flabel">Label column (X axis / category)</label>
-        <select class="finput" id="m-label">${cols.map(c => `<option>${escHTML(c)}</option>`).join('')}</select>
+        <select class="finput" id="m-label" onchange="handleLabelChange()">${cols.map(c => `<option>${escHTML(c)}</option>`).join('')}</select>
       </div>
       <div class="field-g"><label class="flabel">Value column (Y axis / metric)</label>
-        <select class="finput" id="m-value">${cols.map((c, i) => `<option ${i === 1 && cols.length > 1 ? 'selected' : ''}>${escHTML(c)}</option>`).join('')}</select>
+        <div style="display:flex;gap:6px">
+          <select class="finput" id="m-value" style="flex:2" onchange="handleValueChange()">${cols.map((c, i) => `<option ${i === 1 && cols.length > 1 ? 'selected' : ''}>${escHTML(c)}</option>`).join('')}</select>
+          <select class="finput" id="m-agg" style="flex:1">
+            <option value="count">COUNT</option>
+            <option value="sum">SUM</option>
+            <option value="avg">AVG</option>
+            <option value="min">MIN</option>
+            <option value="max">MAX</option>
+          </select>
+        </div>
       </div>
       <div class="modal-actions">
         <button class="btn primary" onclick="saveWidget()">Add to dashboard</button>
@@ -328,14 +350,37 @@ function renderModal() {
 }
 
 /* ── CHART ──────────────────────────────────────────── */
+function groupByLabel(data, labelCol, valCol) {
+  const grouped = new Map();
+  data.forEach(row => {
+    const key = String(row[labelCol] ?? 'Unknown');
+    const val = Number(row[valCol]);
+    if (!grouped.has(key)) grouped.set(key, { values: [], count: 0 });
+    const g = grouped.get(key);
+    g.count++;
+    if (!isNaN(val)) g.values.push(val);
+  });
+  return grouped;
+}
+
 export function drawChart(w) {
   const cv = document.getElementById('cv-' + w.id);
   if (!cv) return;
   if (cv._ch) cv._ch.destroy();
   const data = w.data || [];
-  const labels = data.map(x => String(x[w.label_col] ?? ''));
-  const values = data.map(x => Number(x[w.val_col]) || 0);
+  const agg = w.agg || 'count';
+
+  // One slice/bar per distinct label value, aggregated — not one per row,
+  // otherwise a query with many rows produces an unreadable pie/bar.
+  const grouped = groupByLabel(data, w.label_col, w.val_col);
+  const labels = [...grouped.keys()];
+  const values = labels.map(label => {
+    const g = grouped.get(label);
+    return aggregate(agg, g.values, g.count);
+  });
+
   const isPie = ['pie', 'doughnut'].includes(w.chart_type);
+  const yTitle = `${agg.toUpperCase()}(${w.val_col})`;
   cv._ch = new Chart(cv, {
     type: w.chart_type,
     data: {
@@ -353,11 +398,17 @@ export function drawChart(w) {
       responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { display: isPie, position: 'bottom', labels: { boxWidth: 9, font: { size: 10 }, padding: 8 } },
-        tooltip: { callbacks: { label: ctx => ` ${ctx.label || ''}: ${ctx.parsed.y ?? ctx.parsed}` } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label || ''}: ${yTitle} = ${ctx.parsed.y ?? ctx.parsed}` } },
       },
       scales: isPie ? {} : {
-        x: { grid: { color: '#f0f1f3' }, ticks: { font: { size: 10 }, maxRotation: 45 } },
-        y: { grid: { color: '#f0f1f3' }, ticks: { font: { size: 10 } }, beginAtZero: true },
+        x: {
+          title: { display: true, text: w.label_col, font: { size: 12, weight: '600' } },
+          grid: { color: '#f0f1f3' }, ticks: { font: { size: 10 }, maxRotation: 45 },
+        },
+        y: {
+          title: { display: true, text: yTitle, font: { size: 12, weight: '600' } },
+          grid: { color: '#f0f1f3' }, ticks: { font: { size: 10 } }, beginAtZero: true,
+        },
       },
     },
   });
