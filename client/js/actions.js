@@ -56,14 +56,14 @@ export async function doSignup() {
 export function doLogout() {
   clearToken();
   S.authed = false; S.user = null;
-  S.activeSchema = {}; S.uploadedFiles = []; S.widgets = [];
+  S.activeSchema = {}; S.uploadedFiles = []; S.widgets = []; S.savedQueries = [];
   S.curData = []; S.curCols = [];
   S.page = 'builder';
   render();
 }
 
 async function afterAuth() {
-  await Promise.all([refreshSchema(), refreshDatasources()]);
+  await Promise.all([refreshSchema(), refreshDatasources(), refreshSavedQueries()]);
   render();
   setSt('Ready — PostgreSQL connected', 'ok');
 }
@@ -226,9 +226,26 @@ export async function saveWidget() {
   try {
     await api.createWidget({ name, chartType: S.selChart, sqlText: S.sqlText, labelCol, valCol });
     S.modal = null;
+    // Widget now owns this query — clear the editor so the builder starts fresh.
+    S.sqlText = ''; S.curData = []; S.curCols = [];
     await go('dashboard');
   } catch (err) {
     setSt('Could not save widget: ' + err.message, 'err');
+    render();
+  }
+}
+
+export async function renameWidget(id) {
+  const w = S.widgets.find(w => w.id === id);
+  if (!w) return;
+  const name = prompt('Rename widget:', w.name);
+  if (!name || !name.trim() || name.trim() === w.name) return;
+  try {
+    await api.renameWidget(id, name.trim());
+    w.name = name.trim();
+    render();
+  } catch (err) {
+    setSt('Could not rename widget: ' + err.message, 'err');
     render();
   }
 }
@@ -268,5 +285,70 @@ export async function clearDash() {
     render();
   } catch (err) {
     setSt('Could not clear dashboard: ' + err.message, 'err');
+  }
+}
+
+/* ── SAVED QUERIES ──────────────────────────────────── */
+export async function refreshSavedQueries() {
+  try {
+    const { savedQueries } = await api.listSavedQueries();
+    S.savedQueries = savedQueries;
+  } catch (err) {
+    setSt('Could not load saved queries: ' + err.message, 'err');
+  }
+}
+
+export async function saveQuery() {
+  const ta = document.getElementById('sql-ta');
+  if (ta) S.sqlText = ta.value;
+  const sql = S.sqlText.trim();
+  if (!sql) { setSt('Enter a query first', 'err'); return; }
+
+  const name = prompt('Name this query:', '');
+  if (!name || !name.trim()) return;
+  try {
+    await api.createSavedQuery(name.trim(), sql);
+    await refreshSavedQueries();
+    setSt('Query saved', 'ok');
+    render();
+  } catch (err) {
+    setSt('Could not save query: ' + err.message, 'err');
+    render();
+  }
+}
+
+export function loadSavedQuery(id) {
+  const q = S.savedQueries.find(q => q.id === id);
+  if (!q) return;
+  S.sqlText = q.sql_text;
+  S.isVisual = false;
+  S.curData = []; S.curCols = [];
+  S.page = 'builder';
+  render();
+}
+
+export async function removeSavedQuery(id) {
+  try {
+    await api.removeSavedQuery(id);
+    S.savedQueries = S.savedQueries.filter(q => q.id !== id);
+    render();
+  } catch (err) {
+    setSt('Could not remove saved query: ' + err.message, 'err');
+    render();
+  }
+}
+
+/* ── CSV DOWNLOAD ───────────────────────────────────── */
+export async function downloadDatasource(id) {
+  try {
+    const { blob, filename } = await api.downloadDatasource(id);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    setSt('Could not download file: ' + err.message, 'err');
+    render();
   }
 }

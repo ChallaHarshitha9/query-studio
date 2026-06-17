@@ -3,11 +3,13 @@ const path = require('path');
 const express = require('express');
 const cors = require('cors');
 
+const { runMigrations } = require('./runMigrations');
 const authRoutes = require('./routes/auth');
 const queryRoutes = require('./routes/query');
 const schemaRoutes = require('./routes/schema');
 const datasourceRoutes = require('./routes/datasources');
 const widgetRoutes = require('./routes/widgets');
+const savedQueryRoutes = require('./routes/savedQueries');
 
 const app = express();
 
@@ -19,6 +21,7 @@ app.use('/api', queryRoutes);
 app.use('/api', schemaRoutes);
 app.use('/api', datasourceRoutes);
 app.use('/api', widgetRoutes);
+app.use('/api', savedQueryRoutes);
 
 app.use(express.static(path.join(__dirname, '..', '..', 'client')));
 app.get('*', (req, res) => {
@@ -40,4 +43,13 @@ app.use((err, req, res, next) => {
 });
 
 const port = process.env.PORT || 4000;
-app.listen(port, () => console.log(`Query Studio server listening on http://localhost:${port}`));
+
+// Runs schema migrations on every boot so deploys never need manual shell
+// access (e.g. Render's free tier has no Shell tab) — all SQL files are
+// idempotent (CREATE TABLE IF NOT EXISTS / DROP+CREATE for demo seed data).
+runMigrations()
+  .then(() => console.log('Migrations applied.'))
+  .catch(err => console.error('Migration on boot failed (server will still start):', err.message))
+  .finally(() => {
+    app.listen(port, () => console.log(`Query Studio server listening on http://localhost:${port}`));
+  });

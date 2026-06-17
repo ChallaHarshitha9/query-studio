@@ -92,6 +92,15 @@ function renderSidebar() {
     ? S.widgets.map(w => `<div class="wlist-item" onclick="go('dashboard')"><div class="wlist-dot"></div>${escHTML(w.name)}</div>`).join('')
     : '<div style="font-size:11px;color:var(--text3);padding:2px 4px">No widgets yet</div>';
 
+  const qHTML = S.savedQueries.length
+    ? S.savedQueries.map(q => `
+      <div class="wlist-item" onclick="loadSavedQuery(${q.id})" title="${escHTML(q.sql_text)}">
+        <div class="wlist-dot" style="background:var(--green)"></div>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHTML(q.name)}</span>
+        <span onclick="event.stopPropagation();removeSavedQuery(${q.id})" style="color:var(--text3);display:flex" title="Delete">${I.x}</span>
+      </div>`).join('')
+    : '<div style="font-size:11px;color:var(--text3);padding:2px 4px">No saved queries yet</div>';
+
   s.innerHTML = `
     <div class="logo">${I.db}<span>Query Studio</span></div>
     <div class="nav-sec">Menu</div>
@@ -101,7 +110,9 @@ function renderSidebar() {
     <div class="nav-sec" style="margin-top:8px">Schema</div>
     <div class="schema-wrap">${schemaHTML}</div>
     <div class="sidebar-bottom">
-      <div class="nav-sec" style="padding:0 2px 5px">Saved widgets</div>
+      <div class="nav-sec" style="padding:0 2px 5px">Saved queries</div>
+      ${qHTML}
+      <div class="nav-sec" style="padding:6px 2px 5px">Saved widgets</div>
       ${wHTML}
     </div>
     <div class="sidebar-user">
@@ -124,6 +135,7 @@ function renderBuilder() {
         <span class="tag ${S.connTag === 'connected' ? 't-green' : S.connTag === 'connecting' ? 't-amber' : 't-blue'}">${S.connTag}</span>
       </div>
       <button class="btn" onclick="toggleVisual()">${S.isVisual ? I.code + ' SQL' : I.rows + ' Visual'}</button>
+      <button class="btn" onclick="saveQuery()">${I.bookmark} Save query</button>
       <button class="btn" onclick="clearQ()">${I.clear} Clear</button>
       <button class="btn primary" onclick="runQuery()">${I.play} Run</button>
     </div>
@@ -215,7 +227,8 @@ function renderWidgetCard(w) {
     <div class="wcard-hdr">
       <span class="wcard-hdr-name" title="${escHTML(w.name)}">${escHTML(w.name)}</span>
       <span class="tag t-blue" style="font-size:10px">${escHTML(w.chart_type)}</span>
-      <button class="btn" style="padding:3px 6px;margin-left:4px" onclick="removeW(${w.id})" title="Remove">${I.x}</button>
+      <button class="btn" style="padding:3px 6px;margin-left:4px" onclick="renameWidget(${w.id})" title="Rename">${I.pencil}</button>
+      <button class="btn" style="padding:3px 6px" onclick="removeW(${w.id})" title="Remove">${I.x}</button>
     </div>
     <div class="wcard-body">
       ${w.chart_type === 'table' ? renderTableW(w) : w.chart_type === 'kpi' ? renderKPIW(w) : `<canvas id="cv-${w.id}" height="180"></canvas>`}
@@ -267,6 +280,7 @@ function renderConnect() {
             <div class="file-row-name">${escHTML(f.original_filename || f.table_name)}</div>
             <div class="file-row-meta">${(f.row_count || 0).toLocaleString()} rows · ${((f.size_bytes || 0) / 1024).toFixed(1)} KB · table: <code style="font-size:10px;background:var(--bg);padding:1px 4px;border-radius:3px">${escHTML(f.table_name)}</code></div>
           </div>
+          <button class="btn" style="font-size:11px;padding:3px 8px" onclick="downloadDatasource(${f.id})">${I.down} Download</button>
           <button class="btn danger-outline" style="font-size:11px;padding:3px 8px" onclick="removeFile(${f.id})">${I.trash} Remove</button>
         </div>`).join('') : '<div style="font-size:12px;color:var(--text3);margin-bottom:8px">No files uploaded yet</div>'}
       <div class="upload-zone" onclick="document.getElementById('csv-file-in').click()">

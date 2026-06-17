@@ -94,6 +94,27 @@ router.post('/datasources/upload', requireAuth, upload.single('file'), async (re
   }
 });
 
+router.get('/datasources/:id/download', requireAuth, async (req, res) => {
+  const schema = userSchema(req.user.id);
+  try {
+    const found = await pool.query(
+      'SELECT table_name, original_filename FROM datasources WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.user.id]
+    );
+    if (!found.rows.length) return res.status(404).json({ error: 'Datasource not found' });
+    const { table_name: tableName, original_filename: originalFilename } = found.rows[0];
+
+    const data = await pool.query(`SELECT * FROM "${schema}"."${tableName}"`);
+    const csv = Papa.unparse({ fields: data.fields.map(f => f.name), data: data.rows });
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${originalFilename || tableName + '.csv'}"`);
+    res.send(csv);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.delete('/datasources/:id', requireAuth, async (req, res) => {
   const schema = userSchema(req.user.id);
   const client = await pool.connect();

@@ -40,9 +40,28 @@ export const api = {
     return request('/datasources/upload', { method: 'POST', body: form, isForm: true });
   },
   removeDatasource: (id) => request(`/datasources/${id}`, { method: 'DELETE' }),
+  downloadDatasource: async (id) => {
+    const token = getToken();
+    const res = await fetch(`/api/datasources/${id}/download`, {
+      headers: token ? { Authorization: 'Bearer ' + token } : {},
+    });
+    if (!res.ok) {
+      let msg = `Request failed (${res.status})`;
+      try { const d = await res.json(); if (d?.error) msg = d.error; } catch { /* no JSON body */ }
+      throw new Error(msg);
+    }
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    return { blob: await res.blob(), filename: match ? match[1] : 'data.csv' };
+  },
 
   listWidgets: () => request('/widgets'),
   createWidget: (widget) => request('/widgets', { method: 'POST', body: widget }),
+  renameWidget: (id, name) => request(`/widgets/${id}`, { method: 'PATCH', body: { name } }),
   removeWidget: (id) => request(`/widgets/${id}`, { method: 'DELETE' }),
   clearWidgets: () => request('/widgets', { method: 'DELETE' }),
+
+  listSavedQueries: () => request('/saved-queries'),
+  createSavedQuery: (name, sqlText) => request('/saved-queries', { method: 'POST', body: { name, sqlText } }),
+  removeSavedQuery: (id) => request(`/saved-queries/${id}`, { method: 'DELETE' }),
 };

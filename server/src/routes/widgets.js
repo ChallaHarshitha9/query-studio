@@ -34,6 +34,22 @@ router.post('/widgets', requireAuth, async (req, res) => {
   }
 });
 
+router.patch('/widgets/:id', requireAuth, async (req, res) => {
+  const { name } = req.body || {};
+  if (!name || !name.trim()) return res.status(400).json({ error: 'name is required' });
+  try {
+    const result = await pool.query(
+      `UPDATE widgets SET name = $1 WHERE id = $2 AND user_id = $3
+       RETURNING id, name, chart_type, sql_text, label_col, val_col, created_at`,
+      [name.trim(), req.params.id, req.user.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Widget not found' });
+    res.json({ widget: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.delete('/widgets/:id', requireAuth, async (req, res) => {
   try {
     const result = await pool.query('DELETE FROM widgets WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);

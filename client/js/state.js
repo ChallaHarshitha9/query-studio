@@ -17,7 +17,7 @@ export const S = {
   activeSchema: {},
   schemaOpen: {},
   uploadedFiles: [], // [{id, table_name, original_filename, row_count, size_bytes}]
-  connBadge: 'Loading data sourcesâ¦',
+  connBadge: 'Loading data sources...',
   connTag: 'connecting',
   connMode: 'demo',
 
@@ -34,4 +34,7 @@ export const S = {
   // dashboard
   widgets: [], // [{id, name, chart_type, sql_text, label_col, val_col, data, cols}]
   selChart: 'bar',
+
+  // saved queries (distinct from widgets — just a name + SQL text to reload later)
+  savedQueries: [], // [{id, name, sql_text, created_at}]
 };
