@@ -1,0 +1,358 @@
+import { I } from './icons.js';
+import { S, PAL, MAX_MB } from './state.js';
+
+export function escHTML(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+export function render() {
+  const app = document.getElementById('APP');
+  app.innerHTML = '';
+
+  if (!S.authed) {
+    app.appendChild(renderAuth());
+    closeModalUI();
+    return;
+  }
+
+  app.appendChild(renderSidebar());
+  if (S.page === 'builder') app.appendChild(renderBuilder());
+  else if (S.page === 'dashboard') app.appendChild(renderDashboard());
+  else if (S.page === 'connect') app.appendChild(renderConnect());
+
+  const modal = document.getElementById('MODAL');
+  if (S.modal) {
+    modal.style.display = 'flex';
+    modal.innerHTML = '';
+    modal.appendChild(renderModal());
+  } else {
+    closeModalUI();
+  }
+
+  if (S.page === 'dashboard') {
+    setTimeout(() => S.widgets.forEach(w => {
+      if (!['table', 'kpi'].includes(w.chart_type)) drawChart(w);
+    }), 60);
+  }
+}
+
+function closeModalUI() {
+  const modal = document.getElementById('MODAL');
+  modal.style.display = 'none';
+}
+
+/* ── AUTH ───────────────────────────────────────────── */
+function renderAuth() {
+  const wrap = document.createElement('div');
+  wrap.className = 'auth-wrap';
+  const isSignup = S.authMode === 'signup';
+  wrap.innerHTML = `
+    <div class="auth-card">
+      <h2>${I.db} Query Studio</h2>
+      <div class="auth-sub">${isSignup ? 'Create an account to start querying.' : 'Sign in to your workspace.'}</div>
+      ${S.authErr ? `<div class="auth-err">${escHTML(S.authErr)}</div>` : ''}
+      <div class="field-g"><label class="flabel">Email</label>
+        <input class="finput" id="auth-email" type="email" placeholder="you@example.com" autofocus/>
+      </div>
+      <div class="field-g"><label class="flabel">Password</label>
+        <input class="finput" id="auth-pass" type="password" placeholder="${isSignup ? 'At least 8 characters' : '••••••••'}"/>
+      </div>
+      <button class="btn primary" style="width:100%;justify-content:center" id="auth-submit" ${S.authBusy ? 'disabled' : ''} onclick="${isSignup ? 'doSignup' : 'doLogin'}()">
+        ${S.authBusy ? 'Please wait…' : (isSignup ? 'Create account' : 'Sign in')}
+      </button>
+      <div class="auth-toggle">
+        ${isSignup ? 'Already have an account? <a onclick="setAuthMode(\'login\')">Sign in</a>' : 'Need an account? <a onclick="setAuthMode(\'signup\')">Create one</a>'}
+      </div>
+    </div>`;
+  setTimeout(() => {
+    const onEnter = (e) => { if (e.key === 'Enter') (isSignup ? window.doSignup() : window.doLogin()); };
+    document.getElementById('auth-email')?.addEventListener('keydown', onEnter);
+    document.getElementById('auth-pass')?.addEventListener('keydown', onEnter);
+  }, 10);
+  return wrap;
+}
+
+/* ── SIDEBAR ────────────────────────────────────────── */
+function renderSidebar() {
+  const s = document.createElement('div');
+  s.className = 'sidebar';
+
+  const schemaHTML = Object.entries(S.activeSchema).map(([t, cols]) => `
+    <div class="stbl">
+      <div class="stbl-hdr" onclick="toggleSchema('${t}')">
+        ${I.tbl}<span style="flex:1">${t}</span>
+        ${S.schemaOpen[t] === false ? I.chevr : I.chevd}
+      </div>
+      ${S.schemaOpen[t] === false ? '' : cols.map(c => `
+        <div class="scol">${I.col}<span style="flex:1">${c.n}</span><span class="ctype">${c.t}</span></div>
+      `).join('')}
+    </div>`).join('') || '<div style="font-size:11px;color:var(--text3);padding:4px 6px">No schema available</div>';
+
+  const wHTML = S.widgets.length
+    ? S.widgets.map(w => `<div class="wlist-item" onclick="go('dashboard')"><div class="wlist-dot"></div>${escHTML(w.name)}</div>`).join('')
+    : '<div style="font-size:11px;color:var(--text3);padding:2px 4px">No widgets yet</div>';
+
+  s.innerHTML = `
+    <div class="logo">${I.db}<span>Query Studio</span></div>
+    <div class="nav-sec">Menu</div>
+    <div class="nav-item ${S.page === 'builder' ? 'active' : ''}" onclick="go('builder')">${I.code} Query builder</div>
+    <div class="nav-item ${S.page === 'dashboard' ? 'active' : ''}" onclick="go('dashboard')">${I.dash} Dashboard</div>
+    <div class="nav-item ${S.page === 'connect' ? 'active' : ''}" onclick="go('connect')">${I.plug} Data sources</div>
+    <div class="nav-sec" style="margin-top:8px">Schema</div>
+    <div class="schema-wrap">${schemaHTML}</div>
+    <div class="sidebar-bottom">
+      <div class="nav-sec" style="padding:0 2px 5px">Saved widgets</div>
+      ${wHTML}
+    </div>
+    <div class="sidebar-user">
+      <span title="${escHTML(S.user?.email || '')}">${escHTML(S.user?.email || '')}</span>
+      <button class="btn" style="padding:3px 7px" onclick="doLogout()" title="Sign out">${I.logout}</button>
+    </div>`;
+  return s;
+}
+
+/* ── QUERY BUILDER ──────────────────────────────────── */
+function renderBuilder() {
+  const d = document.createElement('div');
+  d.className = 'main';
+  const genSQL = buildVisualSQL();
+
+  d.innerHTML = `
+    <div class="topbar">
+      <div class="topbar-title">
+        <span>${escHTML(S.connBadge)}</span>
+        <span class="tag ${S.connTag === 'connected' ? 't-green' : S.connTag === 'connecting' ? 't-amber' : 't-blue'}">${S.connTag}</span>
+      </div>
+      <button class="btn" onclick="toggleVisual()">${S.isVisual ? I.code + ' SQL' : I.rows + ' Visual'}</button>
+      <button class="btn" onclick="clearQ()">${I.clear} Clear</button>
+      <button class="btn primary" onclick="runQuery()">${I.play} Run</button>
+    </div>
+    <div class="content">
+      ${!S.isVisual ? `
+      <div class="panel">
+        <div class="phdr">${I.code} SQL editor <span style="margin-left:auto;font-size:10px;font-weight:400;color:var(--green)">● PostgreSQL · real SQL</span></div>
+        <textarea class="sql" id="sql-ta" spellcheck="false">${escHTML(S.sqlText)}</textarea>
+        <div class="snippets">
+          ${['SELECT *', 'WHERE', 'GROUP BY', 'ORDER BY', 'COUNT(*)', 'SUM()', 'AVG()', 'LIMIT 10', 'JOIN ON', 'HAVING'].map(s => `<span class="snip" onclick="insertSnip('${s}')">${s}</span>`).join('')}
+        </div>
+      </div>` : `
+      <div class="panel">
+        <div class="vis-row"><span class="kw">SELECT</span><input class="ci" id="v-sel" value="${escHTML(S.vSel)}" oninput="updateVis()" placeholder="columns or expressions"/></div>
+        <div class="vis-row"><span class="kw">FROM</span>
+          <select class="ci" id="v-from" onchange="updateVis()">
+            ${Object.keys(S.activeSchema).map(t => `<option ${t === S.vFrom ? 'selected' : ''}>${t}</option>`).join('')}
+          </select>
+        </div>
+        <div class="vis-row"><span class="kw">WHERE</span><input class="ci" id="v-where" value="${escHTML(S.vWhere)}" placeholder="e.g. status = 'open'" oninput="updateVis()"/></div>
+        <div class="vis-row"><span class="kw">GROUP BY</span><input class="ci" id="v-grp" value="${escHTML(S.vGrp)}" oninput="updateVis()"/></div>
+        <div class="vis-row"><span class="kw">ORDER BY</span>
+          <input class="ci" id="v-ord" value="${escHTML(S.vOrd)}" style="flex:1;margin-right:6px" oninput="updateVis()"/>
+          <select class="ci" id="v-lim" style="width:100px" onchange="updateVis()">
+            ${['', '10', '50', '100', '500'].map(v => `<option value="${v}" ${v === S.vLim ? 'selected' : ''}>${v ? 'Limit ' + v : 'No limit'}</option>`).join('')}
+          </select>
+        </div>
+        <div class="vis-gen-sql">${escHTML(genSQL)}</div>
+      </div>`}
+
+      ${S.curData.length ? `
+      <div class="panel">
+        <div class="phdr">
+          ${I.rows} Results
+          <span style="margin-left:4px;font-weight:400;color:var(--text3)">(${S.curData.length} row${S.curData.length !== 1 ? 's' : ''})</span>
+          <div class="phdr-right">
+            <button class="btn" onclick="exportCSV()" style="font-size:11px">${I.down} CSV</button>
+            <button class="btn success" onclick="openSaveModal()" style="font-size:11px">${I.chart} Save as widget</button>
+          </div>
+        </div>
+        <div class="results-wrap">
+          <table class="rt">
+            <thead><tr>${S.curCols.map(c => `<th title="${escHTML(c)}">${escHTML(c)}</th>`).join('')}</tr></thead>
+            <tbody>${S.curData.map(row => '<tr>' + S.curCols.map(c => `<td title="${escHTML(row[c] ?? '')}">${escHTML(row[c] ?? '')}</td>`).join('') + '</tr>').join('')}</tbody>
+          </table>
+        </div>
+      </div>` : ''}
+    </div>
+    <div class="statusbar">
+      <div class="status-dot ${S.statusState === 'ok' ? 'ok' : S.statusState === 'err' ? 'err' : S.statusState === 'run' ? 'run' : ''}"></div>
+      <span>${escHTML(S.statusText)}</span>
+    </div>`;
+  return d;
+}
+
+export function buildVisualSQL() {
+  let q = `SELECT ${S.vSel || '*'}\nFROM ${S.vFrom}`;
+  if (S.vWhere) q += `\nWHERE ${S.vWhere}`;
+  if (S.vGrp) q += `\nGROUP BY ${S.vGrp}`;
+  if (S.vOrd) q += `\nORDER BY ${S.vOrd}`;
+  if (S.vLim) q += `\nLIMIT ${S.vLim}`;
+  return q;
+}
+
+/* ── DASHBOARD ──────────────────────────────────────── */
+function renderDashboard() {
+  const d = document.createElement('div');
+  d.className = 'main';
+  const hasW = S.widgets.length > 0;
+  d.innerHTML = `
+    <div class="topbar">
+      <div class="topbar-title">Dashboard</div>
+      <button class="btn" onclick="go('builder')">${I.plus} Add widget</button>
+      <button class="btn danger-outline" onclick="clearDash()">${I.trash} Clear all</button>
+    </div>
+    <div class="content">
+      ${!hasW ? `
+      <div class="empty-state">
+        ${I.dash.replace('class="nav-icon"', 'width="40" height="40"')}
+        <h3>Dashboard is empty</h3>
+        <p>Run a query, then click "Save as widget" to add charts here</p>
+      </div>` : `<div class="dash-grid">${S.widgets.map(renderWidgetCard).join('')}</div>`}
+    </div>`;
+  return d;
+}
+
+function renderWidgetCard(w) {
+  return `<div class="wcard">
+    <div class="wcard-hdr">
+      <span class="wcard-hdr-name" title="${escHTML(w.name)}">${escHTML(w.name)}</span>
+      <span class="tag t-blue" style="font-size:10px">${escHTML(w.chart_type)}</span>
+      <button class="btn" style="padding:3px 6px;margin-left:4px" onclick="removeW(${w.id})" title="Remove">${I.x}</button>
+    </div>
+    <div class="wcard-body">
+      ${w.chart_type === 'table' ? renderTableW(w) : w.chart_type === 'kpi' ? renderKPIW(w) : `<canvas id="cv-${w.id}" height="180"></canvas>`}
+    </div>
+  </div>`;
+}
+
+function renderTableW(w) {
+  const cols = w.cols || [];
+  const data = w.data || [];
+  return `<div style="overflow:auto;max-height:180px"><table class="rt" style="font-size:11px">
+    <thead><tr>${cols.map(c => `<th>${escHTML(c)}</th>`).join('')}</tr></thead>
+    <tbody>${data.slice(0, 10).map(row => '<tr>' + cols.map(c => `<td>${escHTML(row[c] ?? '')}</td>`).join('') + '</tr>').join('')}</tbody>
+  </table></div>`;
+}
+function renderKPIW(w) {
+  const data = w.data || [];
+  const vals = data.map(x => Number(x[w.val_col]) || 0);
+  const total = vals.reduce((a, b) => a + b, 0);
+  const avg = vals.length ? (total / vals.length).toFixed(1) : 0;
+  return `<div class="kpi-card">
+    <div class="kpi-label">${escHTML(w.val_col || '')}</div>
+    <div class="kpi-value">${total.toLocaleString()}</div>
+    <div class="kpi-sub">avg ${avg} · ${data.length} rows</div>
+  </div>`;
+}
+
+/* ── DATA SOURCES ───────────────────────────────────── */
+function renderConnect() {
+  const d = document.createElement('div');
+  d.className = 'main';
+  d.innerHTML = `
+    <div class="topbar"><div class="topbar-title">Data sources</div></div>
+    <div class="content">
+      <div class="conn-card active">
+        <div class="conn-icon" style="background:#fdf4ff;font-size:18px">🧪</div>
+        <div style="flex:1">
+          <div class="conn-card-title">Demo data</div>
+          <div class="conn-card-desc">gnn_alerts · incidents · users — read-only, shared by every account</div>
+        </div>
+        <span style="color:var(--green)">${I.check}</span>
+      </div>
+
+      <div style="font-size:12.5px;font-weight:600;margin:14px 0 7px">Your uploaded tables</div>
+      ${S.uploadedFiles.length ? S.uploadedFiles.map(f => `
+        <div class="file-row">
+          <span style="color:var(--green)">${I.file}</span>
+          <div style="flex:1">
+            <div class="file-row-name">${escHTML(f.original_filename || f.table_name)}</div>
+            <div class="file-row-meta">${(f.row_count || 0).toLocaleString()} rows · ${((f.size_bytes || 0) / 1024).toFixed(1)} KB · table: <code style="font-size:10px;background:var(--bg);padding:1px 4px;border-radius:3px">${escHTML(f.table_name)}</code></div>
+          </div>
+          <button class="btn danger-outline" style="font-size:11px;padding:3px 8px" onclick="removeFile(${f.id})">${I.trash} Remove</button>
+        </div>`).join('') : '<div style="font-size:12px;color:var(--text3);margin-bottom:8px">No files uploaded yet</div>'}
+      <div class="upload-zone" onclick="document.getElementById('csv-file-in').click()">
+        ${I.upload}
+        <h4>Click to upload CSV or TSV</h4>
+        <p>Max ${MAX_MB}MB per file · filename becomes the table name · multiple files allowed<br/>Tables are created in your own Postgres schema · types auto-detected (NUMBER / TEXT)</p>
+        <input type="file" id="csv-file-in" accept=".csv,.tsv,.txt" multiple style="display:none" onchange="handleCSVUpload(event)"/>
+      </div>
+      <div id="csv-err"></div>
+    </div>`;
+  return d;
+}
+
+/* ── MODAL ──────────────────────────────────────────── */
+function renderModal() {
+  const cols = S.curCols;
+  if (S.modal === 'save') {
+    const div = document.createElement('div');
+    div.className = 'modal';
+    div.innerHTML = `
+      <h3>Save as widget</h3>
+      <div class="field-g"><label class="flabel">Widget name</label>
+        <input class="finput" id="m-name" placeholder="e.g. Alerts by severity" autofocus/>
+      </div>
+      <div class="field-g">
+        <label class="flabel">Chart type</label>
+        <div class="chart-grid">
+          ${[{ t: 'pie', i: I.pie, l: 'Pie' }, { t: 'bar', i: I.bar, l: 'Bar' }, { t: 'line', i: I.line, l: 'Line' }, { t: 'doughnut', i: I.donut, l: 'Donut' }, { t: 'kpi', i: I.kpi, l: 'KPI' }, { t: 'table', i: I.rows, l: 'Table' }]
+            .map(c => `<button class="ct-btn ${S.selChart === c.t ? 'sel' : ''}" onclick="selChartType('${c.t}', event)">${c.i}${c.l}</button>`).join('')}
+        </div>
+      </div>
+      <div class="field-g"><label class="flabel">Label column (X axis / category)</label>
+        <select class="finput" id="m-label">${cols.map(c => `<option>${escHTML(c)}</option>`).join('')}</select>
+      </div>
+      <div class="field-g"><label class="flabel">Value column (Y axis / metric)</label>
+        <select class="finput" id="m-value">${cols.map((c, i) => `<option ${i === 1 && cols.length > 1 ? 'selected' : ''}>${escHTML(c)}</option>`).join('')}</select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn primary" onclick="saveWidget()">Add to dashboard</button>
+        <button class="btn" onclick="closeModal()">Cancel</button>
+      </div>`;
+    return div;
+  }
+  return document.createElement('div');
+}
+
+/* ── CHART ──────────────────────────────────────────── */
+export function drawChart(w) {
+  const cv = document.getElementById('cv-' + w.id);
+  if (!cv) return;
+  if (cv._ch) cv._ch.destroy();
+  const data = w.data || [];
+  const labels = data.map(x => String(x[w.label_col] ?? ''));
+  const values = data.map(x => Number(x[w.val_col]) || 0);
+  const isPie = ['pie', 'doughnut'].includes(w.chart_type);
+  cv._ch = new Chart(cv, {
+    type: w.chart_type,
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: isPie ? PAL.slice(0, labels.length) : PAL[0],
+        borderColor: 'transparent',
+        borderRadius: w.chart_type === 'bar' ? 4 : 0,
+        tension: 0.4, fill: false, pointRadius: 4,
+        borderWidth: w.chart_type === 'line' ? 2 : 0,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: isPie, position: 'bottom', labels: { boxWidth: 9, font: { size: 10 }, padding: 8 } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label || ''}: ${ctx.parsed.y ?? ctx.parsed}` } },
+      },
+      scales: isPie ? {} : {
+        x: { grid: { color: '#f0f1f3' }, ticks: { font: { size: 10 }, maxRotation: 45 } },
+        y: { grid: { color: '#f0f1f3' }, ticks: { font: { size: 10 } }, beginAtZero: true },
+      },
+    },
+  });
+}
+
+export function setSt(txt, state) {
+  S.statusText = txt; S.statusState = state;
+  const dot = document.querySelector('.status-dot');
+  const span = document.querySelector('.statusbar span');
+  if (dot) dot.className = 'status-dot' + (state === 'ok' ? ' ok' : state === 'err' ? ' err' : state === 'run' ? ' run' : '');
+  if (span) span.textContent = txt;
+}
