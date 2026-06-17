@@ -142,7 +142,7 @@ function renderBuilder() {
     <div class="content">
       ${!S.isVisual ? `
       <div class="panel">
-        <div class="phdr">${I.code} SQL editor <span style="margin-left:auto;font-size:10px;font-weight:400;color:var(--green)">● PostgreSQL · real SQL</span></div>
+        <div class="phdr">${I.code} SQL editor</div>
         <textarea class="sql" id="sql-ta" spellcheck="false">${escHTML(S.sqlText)}</textarea>
         <div class="snippets">
           ${['SELECT *', 'WHERE', 'GROUP BY', 'ORDER BY', 'COUNT(*)', 'SUM()', 'AVG()', 'LIMIT 10', 'JOIN ON', 'HAVING'].map(s => `<span class="snip" onclick="insertSnip('${s}')">${s}</span>`).join('')}
@@ -207,7 +207,12 @@ function renderDashboard() {
   const hasW = S.widgets.length > 0;
   d.innerHTML = `
     <div class="topbar">
-      <div class="topbar-title">Dashboard</div>
+      <div class="topbar-title">
+        Dashboard
+        ${S.dashboardUpdatedAt ? `<span style="margin-left:8px;font-size:11px;font-weight:400;color:var(--text3)">Updated ${S.dashboardUpdatedAt.toLocaleTimeString()}</span>` : ''}
+      </div>
+      <button class="btn" onclick="refreshDashboard()">${I.refresh} Refresh</button>
+      <button class="btn ${S.autoRefresh ? 'primary' : ''}" onclick="toggleAutoRefresh()">${I.refresh} Auto-refresh: ${S.autoRefresh ? 'On' : 'Off'}</button>
       <button class="btn" onclick="go('builder')">${I.plus} Add widget</button>
       <button class="btn danger-outline" onclick="clearDash()">${I.trash} Clear all</button>
     </div>
@@ -226,8 +231,8 @@ function renderWidgetCard(w) {
   return `<div class="wcard">
     <div class="wcard-hdr">
       <span class="wcard-hdr-name" title="${escHTML(w.name)}">${escHTML(w.name)}</span>
-      <span class="tag t-blue" style="font-size:10px">${escHTML(w.chart_type)}</span>
-      <button class="btn" style="padding:3px 6px;margin-left:4px" onclick="renameWidget(${w.id})" title="Rename">${I.pencil}</button>
+      <button class="btn" style="padding:3px 6px" onclick="refreshWidget(${w.id})" title="Refresh">${I.refresh}</button>
+      <button class="btn" style="padding:3px 6px" onclick="renameWidget(${w.id})" title="Rename">${I.pencil}</button>
       <button class="btn" style="padding:3px 6px" onclick="removeW(${w.id})" title="Remove">${I.x}</button>
     </div>
     <div class="wcard-body">

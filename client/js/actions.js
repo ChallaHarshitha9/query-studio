@@ -55,9 +55,11 @@ export async function doSignup() {
 
 export function doLogout() {
   clearToken();
+  stopAutoRefresh();
   S.authed = false; S.user = null;
   S.activeSchema = {}; S.uploadedFiles = []; S.widgets = []; S.savedQueries = [];
   S.curData = []; S.curCols = [];
+  S.autoRefresh = false; S.dashboardUpdatedAt = null;
   S.page = 'builder';
   render();
 }
@@ -300,9 +302,47 @@ export async function loadWidgetsData() {
       }
     }));
     S.widgets = withData;
+    S.dashboardUpdatedAt = new Date();
   } catch (err) {
     setSt('Could not load widgets: ' + err.message, 'err');
   }
+}
+
+export async function refreshDashboard() {
+  await loadWidgetsData();
+  render();
+}
+
+export async function refreshWidget(id) {
+  const w = S.widgets.find(w => w.id === id);
+  if (!w) return;
+  try {
+    const { rows } = await api.runQuery(w.sql_text);
+    w.data = rows;
+    w.cols = rows.length ? Object.keys(rows[0]) : [];
+    render();
+  } catch (err) {
+    setSt('Could not refresh widget: ' + err.message, 'err');
+  }
+}
+
+let autoRefreshTimer = null;
+const AUTO_REFRESH_MS = 15000;
+
+export function toggleAutoRefresh() {
+  S.autoRefresh = !S.autoRefresh;
+  if (S.autoRefresh) {
+    autoRefreshTimer = setInterval(() => {
+      if (S.page === 'dashboard') refreshDashboard();
+    }, AUTO_REFRESH_MS);
+  } else {
+    stopAutoRefresh();
+  }
+  render();
+}
+
+function stopAutoRefresh() {
+  if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
 }
 
 export async function removeW(id) {

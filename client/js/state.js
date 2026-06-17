@@ -34,6 +34,8 @@ export const S = {
   // dashboard
   widgets: [], // [{id, name, chart_type, sql_text, label_col, val_col, data, cols}]
   selChart: 'bar',
+  autoRefresh: false,
+  dashboardUpdatedAt: null,
 
   // saved queries (distinct from widgets — just a name + SQL text to reload later)
   savedQueries: [], // [{id, name, sql_text, created_at}]
