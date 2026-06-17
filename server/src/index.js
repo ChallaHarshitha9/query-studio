@@ -23,7 +23,13 @@ app.use('/api', datasourceRoutes);
 app.use('/api', widgetRoutes);
 app.use('/api', savedQueryRoutes);
 
-app.use(express.static(path.join(__dirname, '..', '..', 'client')));
+// Forces the browser to revalidate index.html/JS/CSS on every load instead
+// of serving a stale cached copy after a deploy (no cache-busting filenames
+// are in use, so without this, "the new code isn't showing up" after a
+// deploy almost always just means the browser cache, not a failed deploy).
+app.use(express.static(path.join(__dirname, '..', '..', 'client'), {
+  setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
+}));
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api')) return res.status(404).json({ error: 'Not found' });
   res.sendFile(path.join(__dirname, '..', '..', 'client', 'index.html'));
