@@ -1,6 +1,6 @@
 import { api, getToken, setToken, clearToken } from './api.js';
 import { S, MAX_MB } from './state.js';
-import { render, buildVisualSQL, setSt, renderModalPreview, applyModalFieldVisibility } from './render.js';
+import { render, buildVisualSQL, setSt, renderModalPreview, applyModalFieldVisibility, updateWidgetCard } from './render.js';
 
 /* ── BOOT / AUTH ────────────────────────────────────── */
 export async function boot() {
@@ -379,10 +379,20 @@ export async function loadWidgetsData() {
     const { widgets } = await api.listWidgets();
     // Widgets render from the data snapshot saved at creation time, not by
     // re-running sql_text against the database on every Dashboard visit.
-    S.widgets = widgets.map(w => {
-      const rows = w.data || [];
-      return { ...w, data: rows, cols: rows.length ? Object.keys(rows[0]) : [] };
-    });
+    // If a widget has no snapshot for any reason (saved before this feature
+    // existed, or the result was empty at save time), fall back to running
+    // its query once rather than showing it permanently blank.
+    S.widgets = await Promise.all(widgets.map(async w => {
+      if (w.data && w.data.length) {
+        return { ...w, cols: Object.keys(w.data[0]) };
+      }
+      try {
+        const { rows } = await api.runQuery(w.sql_text);
+        return { ...w, data: rows, cols: rows.length ? Object.keys(rows[0]) : [] };
+      } catch {
+        return { ...w, data: [], cols: [] };
+      }
+    }));
     S.dashboardUpdatedAt = new Date();
   } catch (err) {
     setSt('Could not load widgets: ' + err.message, 'err');
@@ -416,7 +426,9 @@ export async function refreshWidget(id) {
     const { rows } = await api.runQuery(w.sql_text);
     w.data = rows;
     w.cols = rows.length ? Object.keys(rows[0]) : [];
-    render();
+    // Update just this widget's card instead of calling render(), which
+    // would tear down and redraw every other widget's chart too.
+    updateWidgetCard(w);
   } catch (err) {
     setSt('Could not refresh widget: ' + err.message, 'err');
   }

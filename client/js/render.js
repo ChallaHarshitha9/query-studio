@@ -285,10 +285,22 @@ function renderWidgetCard(w) {
       <button class="btn" style="padding:3px 6px" onclick="renameWidget(${w.id})" title="Rename">${I.pencil}</button>
       <button class="btn" style="padding:3px 6px" onclick="removeW(${w.id})" title="Remove">${I.x}</button>
     </div>
-    <div class="wcard-body">
+    <div class="wcard-body" data-wid="${w.id}">
       ${w.chart_type === 'table' ? renderTableW(w) : w.chart_type === 'kpi' ? renderKPIW(w) : `<canvas id="cv-${w.id}" height="180"></canvas>`}
     </div>
   </div>`;
+}
+
+// Updates a single widget's card in place (its canvas, or its table/KPI
+// HTML) without touching the rest of the dashboard — used after refreshing
+// just one widget, so other widgets' charts don't get torn down and redrawn.
+export function updateWidgetCard(w) {
+  if (w.chart_type === 'table' || w.chart_type === 'kpi') {
+    const body = document.querySelector(`.wcard-body[data-wid="${w.id}"]`);
+    if (body) body.innerHTML = w.chart_type === 'table' ? renderTableW(w) : renderKPIW(w);
+  } else {
+    drawChart(w);
+  }
 }
 
 function renderTableW(w) {
