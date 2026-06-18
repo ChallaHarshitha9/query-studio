@@ -363,6 +363,17 @@ export async function renameWidget(id) {
   }
 }
 
+export function viewWidgetSQL(id) {
+  const w = S.widgets.find(w => w.id === id);
+  if (!w) return;
+  S.sqlText = w.sql_text;
+  S.isVisual = false;
+  S.curData = []; S.curCols = [];
+  S.page = 'builder';
+  setSt('Showing the query behind "' + w.name + '"', 'ok');
+  render();
+}
+
 export async function loadWidgetsData() {
   try {
     const { widgets } = await api.listWidgets();

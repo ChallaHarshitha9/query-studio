@@ -280,6 +280,7 @@ function renderWidgetCard(w) {
   return `<div class="wcard">
     <div class="wcard-hdr">
       <span class="wcard-hdr-name" title="${escHTML(w.name)}">${escHTML(w.name)}</span>
+      <button class="btn" style="padding:3px 6px" onclick="viewWidgetSQL(${w.id})" title="View base SQL query">${I.code}</button>
       <button class="btn" style="padding:3px 6px" onclick="refreshWidget(${w.id})" title="Refresh">${I.refresh}</button>
       <button class="btn" style="padding:3px 6px" onclick="renameWidget(${w.id})" title="Rename">${I.pencil}</button>
       <button class="btn" style="padding:3px 6px" onclick="removeW(${w.id})" title="Remove">${I.x}</button>
