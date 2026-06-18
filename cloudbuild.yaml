@@ -1,0 +1,28 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ['build', '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/query-studio/app:$COMMIT_SHA', '.']
+
+  - name: gcr.io/cloud-builders/docker
+    args: ['push', 'us-central1-docker.pkg.dev/$PROJECT_ID/query-studio/app:$COMMIT_SHA']
+
+  # Omitting --set-env-vars on purpose: Cloud Run keeps the previous
+  # revision's env vars (DATABASE_URL, JWT_SECRET, etc.) unless told
+  # otherwise, so secrets never need to live in this committed file.
+  - name: gcr.io/google-cloud-sdk/slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - query-studio
+      - --image=us-central1-docker.pkg.dev/$PROJECT_ID/query-studio/app:$COMMIT_SHA
+      - --region=us-central1
+      - --platform=managed
+      - --allow-unauthenticated
+      - --add-cloudsql-instances=$PROJECT_ID:us-central1:query-studio-db
+      - --min-instances=0
+      - --max-instances=2
+      - --memory=512Mi
+      - --cpu=1
+
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/query-studio/app:$COMMIT_SHA'
