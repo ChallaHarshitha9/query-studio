@@ -137,7 +137,7 @@ function renderBuilder() {
       <button class="btn" onclick="toggleVisual()">${S.isVisual ? I.code + ' SQL' : I.rows + ' Visual'}</button>
       <button class="btn" onclick="saveQuery()">${I.bookmark} Save query</button>
       <button class="btn" onclick="clearQ()">${I.clear} Clear</button>
-      <button class="btn primary" onclick="runQuery()">${I.play} Run</button>
+      <button class="btn primary lg" style="margin-left:10px" onclick="runQuery()">${I.play} Run</button>
     </div>
     <div class="content">
       <div class="panel">
