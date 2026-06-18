@@ -123,8 +123,14 @@ router.post('/nl-to-sql', requireAuth, async (req, res) => {
             'right after the table name, then provide exactly one value per listed column, in the ' +
             'same order. Before responding, count the column list and the value list and make sure ' +
             'they are exactly equal — this is the most common mistake, avoid it.\n' +
+            'For WHERE/HAVING comparisons of a text/varchar/char column against a literal string ' +
+            '(e.g. matching a status, category, or name typed by the user), use ILIKE instead of = ' +
+            'for that comparison, since the exact stored capitalization is unknown and may not match ' +
+            'how the user phrased it (e.g. write category ILIKE \'emergency\' instead of ' +
+            'category = \'Emergency\'). Do not use ILIKE on numeric, boolean, or date/timestamp ' +
+            'columns — only on text-typed columns being compared to a literal string.\n' +
             'Respond with ONLY the raw SQL — no markdown code fences, no explanation.\n\n' +
-            'Available tables:\n' + (schemaText || '(none yet)'),
+            'Available tables (name and Postgres data type of each column):\n' + (schemaText || '(none yet)'),
         },
         { role: 'user', content: prompt },
       ],
