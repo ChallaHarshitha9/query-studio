@@ -52,9 +52,11 @@ router.post('/nl-to-sql', requireAuth, async (req, res) => {
         {
           role: 'system',
           content:
-            'You translate plain-English requests into a single PostgreSQL SELECT query.\n' +
-            'Only reference the tables and columns listed below; never invent column names.\n' +
-            'Never write INSERT, UPDATE, DELETE, DROP, ALTER, or any statement other than SELECT.\n' +
+            'You translate plain-English requests into a single PostgreSQL statement — ' +
+            'SELECT, INSERT, UPDATE, DELETE, CREATE TABLE, ALTER TABLE, or any other valid ' +
+            'statement, whichever matches what is being asked.\n' +
+            'Only reference the tables and columns listed below; never invent column or table names.\n' +
+            'Write exactly ONE statement — never separate multiple statements with semicolons.\n' +
             'Respond with ONLY the raw SQL — no markdown code fences, no explanation.\n\n' +
             'Available tables:\n' + (schemaText || '(none yet)'),
         },
@@ -65,8 +67,8 @@ router.post('/nl-to-sql', requireAuth, async (req, res) => {
     let sql = (completion.choices?.[0]?.message?.content || '').trim();
     sql = sql.replace(/^```sql\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
 
-    if (!/^select\b/i.test(sql)) {
-      return res.status(422).json({ error: 'Generated query was not a SELECT statement — try rephrasing your request.' });
+    if (!sql) {
+      return res.status(422).json({ error: 'Model returned an empty query — try rephrasing your request.' });
     }
     if (sql.replace(/;\s*$/, '').includes(';')) {
       return res.status(422).json({ error: 'Generated query contained multiple statements — try rephrasing your request.' });

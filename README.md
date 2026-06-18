@@ -110,9 +110,17 @@ public API for this kind of integration.
 
 Everything else in the app works without this — it's an optional add-on. If
 `GITHUB_TOKEN` isn't set, that one feature returns a clear "not configured"
-error instead of breaking anything else. The model only ever generates a
-single `SELECT` statement (enforced server-side) — it cannot be used to run
-inserts/updates/deletes, regardless of what the prompt asks for.
+error instead of breaking anything else.
+
+The model can generate any single PostgreSQL statement — SELECT, INSERT,
+UPDATE, DELETE, CREATE TABLE, etc. — not just SELECT, matching the fact that
+the query editor itself already allows full SQL within your own schema.
+**It never executes automatically**: it only fills the SQL editor for you to
+review and explicitly click Run, and the same schema-isolation and
+single-statement checks in `routes/query.js` still apply at execution time
+no matter how the SQL got into the editor (typed or generated). That means a
+generated query can still modify or delete your own data, so read it before
+running it — same as you would with any SQL you wrote by hand.
 
 ## Notable behavior changes vs. the original single-file prototype
 

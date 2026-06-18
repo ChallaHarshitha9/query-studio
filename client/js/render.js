@@ -146,6 +146,7 @@ function renderBuilder() {
           <input class="finput" id="nl-prompt" style="flex:1" placeholder="e.g. critical alarms by region in the last day" onkeydown="if(event.key==='Enter'){generateSQL()}"/>
           <button class="btn primary" onclick="generateSQL()">${I.play} Generate SQL</button>
         </div>
+        <div style="padding:0 12px 10px;font-size:10.5px;color:var(--text3)">Can generate SELECT, INSERT, UPDATE, DELETE, or other statements — it only fills the editor, review before clicking Run since it can modify or delete data.</div>
       </div>
       ${!S.isVisual ? `
       <div class="panel">
