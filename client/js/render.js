@@ -19,6 +19,7 @@ export function render() {
   if (S.page === 'builder') app.appendChild(renderBuilder());
   else if (S.page === 'dashboard') app.appendChild(renderDashboard());
   else if (S.page === 'connect') app.appendChild(renderConnect());
+  else if (S.page === 'ai') app.appendChild(renderAI());
 
   const modal = document.getElementById('MODAL');
   if (S.modal) {
@@ -33,6 +34,9 @@ export function render() {
     setTimeout(() => S.widgets.forEach(w => {
       if (!['table', 'kpi'].includes(w.chart_type)) drawChart(w);
     }), 60);
+  }
+  if (S.modal === 'save') {
+    setTimeout(renderModalPreview, 60);
   }
 }
 
@@ -107,6 +111,7 @@ function renderSidebar() {
     <div class="nav-item ${S.page === 'builder' ? 'active' : ''}" onclick="go('builder')">${I.code} Query builder</div>
     <div class="nav-item ${S.page === 'dashboard' ? 'active' : ''}" onclick="go('dashboard')">${I.dash} Dashboard</div>
     <div class="nav-item ${S.page === 'connect' ? 'active' : ''}" onclick="go('connect')">${I.plug} Data sources</div>
+    <div class="nav-item ${S.page === 'ai' ? 'active' : ''}" onclick="go('ai')">${I.ai} AI Assistant</div>
     <div class="nav-sec" style="margin-top:8px">Schema</div>
     <div class="schema-wrap">${schemaHTML}</div>
     <div class="sidebar-bottom">
@@ -140,14 +145,6 @@ function renderBuilder() {
       <button class="btn primary lg" style="margin-left:10px" onclick="runQuery()">${I.play} Run</button>
     </div>
     <div class="content">
-      <div class="panel">
-        <div class="phdr">${I.bookmark} Describe your query in English</div>
-        <div style="display:flex;gap:8px;padding:10px 12px">
-          <input class="finput" id="nl-prompt" style="flex:1" placeholder="e.g. critical alarms by region in the last day" onkeydown="if(event.key==='Enter'){generateSQL()}"/>
-          <button class="btn primary" onclick="generateSQL()">${I.play} Generate SQL</button>
-        </div>
-        <div style="padding:0 12px 10px;font-size:10.5px;color:var(--text3)">Can generate SELECT, INSERT, UPDATE, DELETE, or other statements — it only fills the editor, review before clicking Run since it can modify or delete data.</div>
-      </div>
       ${!S.isVisual ? `
       <div class="panel">
         <div class="phdr">${I.code} SQL editor</div>
@@ -206,6 +203,50 @@ export function buildVisualSQL() {
   if (S.vOrd) q += `\nORDER BY ${S.vOrd}`;
   if (S.vLim) q += `\nLIMIT ${S.vLim}`;
   return q;
+}
+
+/* ── AI ASSISTANT ───────────────────────────────────── */
+function renderAI() {
+  const d = document.createElement('div');
+  d.className = 'main';
+  d.innerHTML = `
+    <div class="topbar"><div class="topbar-title">${I.ai} AI Assistant</div></div>
+    <div class="content">
+      <div class="panel">
+        <div class="phdr">${I.bookmark} Describe what you want in English</div>
+        <div style="display:flex;gap:8px;padding:10px 12px">
+          <input class="finput" id="nl-prompt" style="flex:1" placeholder="e.g. critical alarms by region in the last day" onkeydown="if(event.key==='Enter'){generateSQL()}"/>
+        </div>
+        <div style="display:flex;gap:8px;padding:0 12px 12px">
+          <button class="btn primary" onclick="generateSQL()">${I.code} Generate SQL</button>
+          <button class="btn primary" onclick="generateChart()">${I.chart} Generate Chart</button>
+        </div>
+        <div style="padding:0 12px 12px;font-size:10.5px;color:var(--text3)">
+          <strong>Generate SQL</strong> can write SELECT, INSERT, UPDATE, DELETE, or other statements and only fills the
+          query editor — review it on the Query builder page before clicking Run, since it can modify or delete data.<br/>
+          <strong>Generate Chart</strong> is read-only: it writes a SELECT, runs it, and also picks a chart type plus
+          label/value columns and an aggregation — then opens the "Save as widget" dialog with everything pre-filled and
+          a live preview, so you can review and tweak before adding it to your dashboard.
+        </div>
+      </div>
+      ${S.curData.length ? `
+      <div class="panel">
+        <div class="phdr">${I.rows} Last result
+          <span style="margin-left:4px;font-weight:400;color:var(--text3)">(${S.curData.length} row${S.curData.length !== 1 ? 's' : ''})</span>
+        </div>
+        <div class="results-wrap">
+          <table class="rt">
+            <thead><tr>${S.curCols.map(c => `<th title="${escHTML(c)}">${escHTML(c)}</th>`).join('')}</tr></thead>
+            <tbody>${S.curData.slice(0, 20).map(row => '<tr>' + S.curCols.map(c => `<td title="${escHTML(row[c] ?? '')}">${escHTML(row[c] ?? '')}</td>`).join('') + '</tr>').join('')}</tbody>
+          </table>
+        </div>
+      </div>` : ''}
+    </div>
+    <div class="statusbar">
+      <div class="status-dot ${S.statusState === 'ok' ? 'ok' : S.statusState === 'err' ? 'err' : S.statusState === 'run' ? 'run' : ''}"></div>
+      <span>${escHTML(S.statusText)}</span>
+    </div>`;
+  return d;
 }
 
 /* ── DASHBOARD ──────────────────────────────────────── */
@@ -320,16 +361,17 @@ function renderConnect() {
 function renderModal() {
   const cols = S.curCols;
   if (S.modal === 'save') {
+    const sug = S.pendingChartSuggestion;
     const div = document.createElement('div');
     div.className = 'modal';
     div.innerHTML = `
-      <h3>Save as widget</h3>
+      <h3>Save as widget${sug ? ' <span style="font-size:10.5px;font-weight:500;color:var(--text3)">— AI suggested</span>' : ''}</h3>
       <div class="field-g"><label class="flabel">Widget name</label>
-        <input class="finput" id="m-name" placeholder="e.g. Alerts by severity" autofocus/>
+        <input class="finput" id="m-name" value="${escHTML(sug?.name || '')}" placeholder="e.g. Alerts by severity" autofocus/>
       </div>
       <div class="field-g" style="display:flex;align-items:center;gap:8px">
         <label class="flabel" style="margin-bottom:0">Smart Mode</label>
-        <input type="checkbox" id="smart-mode" checked style="width:15px;height:15px"/>
+        <input type="checkbox" id="smart-mode" ${sug ? '' : 'checked'} style="width:15px;height:15px"/>
       </div>
       <div class="field-g">
         <label class="flabel">Chart type</label>
@@ -339,19 +381,18 @@ function renderModal() {
         </div>
       </div>
       <div class="field-g"><label class="flabel">Label column (X axis / category)</label>
-        <select class="finput" id="m-label" onchange="handleLabelChange()">${cols.map(c => `<option>${escHTML(c)}</option>`).join('')}</select>
+        <select class="finput" id="m-label" onchange="handleLabelChange()">${cols.map(c => `<option ${sug?.labelCol === c ? 'selected' : ''}>${escHTML(c)}</option>`).join('')}</select>
       </div>
       <div class="field-g"><label class="flabel">Value column (Y axis / metric)</label>
         <div style="display:flex;gap:6px">
-          <select class="finput" id="m-value" style="flex:2" onchange="handleValueChange()">${cols.map((c, i) => `<option ${i === 1 && cols.length > 1 ? 'selected' : ''}>${escHTML(c)}</option>`).join('')}</select>
-          <select class="finput" id="m-agg" style="flex:1">
-            <option value="count">COUNT</option>
-            <option value="sum">SUM</option>
-            <option value="avg">AVG</option>
-            <option value="min">MIN</option>
-            <option value="max">MAX</option>
+          <select class="finput" id="m-value" style="flex:2" onchange="handleValueChange()">${cols.map((c, i) => `<option ${sug ? (sug.valCol === c ? 'selected' : '') : (i === 1 && cols.length > 1 ? 'selected' : '')}>${escHTML(c)}</option>`).join('')}</select>
+          <select class="finput" id="m-agg" onchange="updateModalPreview()" style="flex:1">
+            ${['count', 'sum', 'avg', 'min', 'max'].map(a => `<option value="${a}" ${(sug?.agg || 'count') === a ? 'selected' : ''}>${a.toUpperCase()}</option>`).join('')}
           </select>
         </div>
+      </div>
+      <div class="field-g"><label class="flabel">Preview</label>
+        <div class="modal-preview" id="m-preview-wrap"><canvas id="m-preview-cv" height="140"></canvas></div>
       </div>
       <div class="modal-actions">
         <button class="btn primary" onclick="saveWidget()">Add to dashboard</button>
@@ -360,6 +401,71 @@ function renderModal() {
     return div;
   }
   return document.createElement('div');
+}
+
+export function renderModalPreview() {
+  const wrap = document.getElementById('m-preview-wrap');
+  if (!wrap) return;
+  const chartType = S.selChart;
+  const labelCol = document.getElementById('m-label')?.value;
+  const valCol = document.getElementById('m-value')?.value;
+  const agg = document.getElementById('m-agg')?.value || 'count';
+  const data = S.curData;
+
+  if (chartType === 'table') {
+    const cols = S.curCols;
+    wrap.innerHTML = `<div style="width:100%;height:100%;overflow:auto"><table class="rt" style="font-size:10.5px">
+      <thead><tr>${cols.map(c => `<th>${escHTML(c)}</th>`).join('')}</tr></thead>
+      <tbody>${data.slice(0, 5).map(row => '<tr>' + cols.map(c => `<td>${escHTML(row[c] ?? '')}</td>`).join('') + '</tr>').join('')}</tbody>
+    </table></div>`;
+    return;
+  }
+  if (chartType === 'kpi') {
+    const vals = data.map(x => Number(x[valCol])).filter(v => !isNaN(v));
+    const result = aggregate(agg, vals, data.length);
+    const display = Number.isInteger(result) ? result.toLocaleString() : result.toFixed(2);
+    wrap.innerHTML = `<div class="kpi-card" style="padding:0">
+      <div class="kpi-label">${agg.toUpperCase()} (${escHTML(valCol || '')})</div>
+      <div class="kpi-value">${display}</div>
+      <div class="kpi-sub">${data.length} row${data.length !== 1 ? 's' : ''}</div>
+    </div>`;
+    return;
+  }
+
+  wrap.innerHTML = '<canvas id="m-preview-cv" height="140"></canvas>';
+  const cv = document.getElementById('m-preview-cv');
+  if (!cv || !labelCol || !valCol || !data.length) return;
+  const grouped = groupByLabel(data, labelCol, valCol);
+  const labels = [...grouped.keys()];
+  const values = labels.map(label => {
+    const g = grouped.get(label);
+    return aggregate(agg, g.values, g.count);
+  });
+  const isPie = ['pie', 'doughnut'].includes(chartType);
+  new Chart(cv, {
+    type: chartType,
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: isPie ? PAL.slice(0, labels.length) : PAL[0],
+        borderColor: 'transparent',
+        borderRadius: chartType === 'bar' ? 4 : 0,
+        tension: 0.4, fill: false, pointRadius: 3,
+        borderWidth: chartType === 'line' ? 2 : 0,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: isPie, position: 'bottom', labels: { boxWidth: 8, font: { size: 9 }, padding: 6 } },
+      },
+      scales: isPie ? {} : {
+        x: { ticks: { font: { size: 9 }, maxRotation: 45 }, grid: { color: '#f0f1f3' } },
+        y: { beginAtZero: true, ticks: { font: { size: 9 } }, grid: { color: '#f0f1f3' } },
+      },
+    },
+  });
 }
 
 /* ── CHART ──────────────────────────────────────────── */

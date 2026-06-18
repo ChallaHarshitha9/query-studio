@@ -1,6 +1,6 @@
 import { api, getToken, setToken, clearToken } from './api.js';
 import { S, MAX_MB } from './state.js';
-import { render, buildVisualSQL, setSt } from './render.js';
+import { render, buildVisualSQL, setSt, renderModalPreview } from './render.js';
 
 /* ── BOOT / AUTH ────────────────────────────────────── */
 export async function boot() {
@@ -60,6 +60,7 @@ export function doLogout() {
   S.activeSchema = {}; S.uploadedFiles = []; S.widgets = []; S.savedQueries = [];
   S.curData = []; S.curCols = [];
   S.autoRefresh = false; S.dashboardUpdatedAt = null;
+  S.pendingChartSuggestion = null; S.modal = null;
   S.page = 'builder';
   render();
 }
@@ -136,6 +137,41 @@ export async function generateSQL() {
     setSt('SQL generated — review it, then click Run', 'ok');
   } catch (err) {
     setSt('Could not generate SQL: ' + err.message, 'err');
+  }
+  render();
+}
+
+export async function generateChart() {
+  const input = document.getElementById('nl-prompt');
+  const prompt = input?.value.trim();
+  if (!prompt) { setSt('Describe the chart you want first', 'err'); return; }
+
+  setSt('Designing chart...', 'run');
+  try {
+    const suggestion = await api.nlToChart(prompt);
+    const { rows } = await api.runQuery(suggestion.sql);
+    if (!rows.length) {
+      setSt('Query returned no rows — nothing to chart. Try a different prompt.', 'err');
+      S.curData = []; S.curCols = [];
+      render();
+      return;
+    }
+    S.sqlText = suggestion.sql;
+    S.isVisual = false;
+    S.curData = rows;
+    S.curCols = Object.keys(rows[0]);
+    S.selChart = suggestion.chartType;
+    S.pendingChartSuggestion = {
+      name: suggestion.name,
+      labelCol: suggestion.labelCol,
+      valCol: suggestion.valCol,
+      agg: suggestion.agg,
+    };
+    S.page = 'builder';
+    S.modal = 'save';
+    setSt(`${rows.length} row${rows.length !== 1 ? 's' : ''} returned — review the suggested chart, then add it`, 'ok');
+  } catch (err) {
+    setSt('Could not generate chart: ' + err.message, 'err');
   }
   render();
 }
@@ -230,15 +266,17 @@ export async function removeFile(id) {
 /* ── WIDGETS / DASHBOARD ────────────────────────────── */
 export function openSaveModal() {
   if (!S.curData.length) return;
-  S.modal = 'save'; S.selChart = 'bar';
+  S.modal = 'save'; S.selChart = 'bar'; S.pendingChartSuggestion = null;
   render();
 }
-export function closeModal() { S.modal = null; render(); }
+export function closeModal() { S.modal = null; S.pendingChartSuggestion = null; render(); }
 export function selChartType(t, evt) {
   S.selChart = t;
   document.querySelectorAll('.ct-btn').forEach(b => b.classList.remove('sel'));
   evt.currentTarget.classList.add('sel');
+  renderModalPreview();
 }
+export function updateModalPreview() { renderModalPreview(); }
 
 // Whether every value of `colName` in the current results looks numeric
 // ("metric") vs. categorical ("dimension") — drives the Smart Mode defaults.
@@ -253,28 +291,30 @@ function detectColumnType(colName) {
 
 export function handleValueChange() {
   const smart = document.getElementById('smart-mode')?.checked;
-  if (!smart) return;
   const col = document.getElementById('m-value')?.value;
   const aggEl = document.getElementById('m-agg');
-  if (!col || !aggEl) return;
-  if (detectColumnType(col) === 'metric') {
-    aggEl.innerHTML = `<option value="sum">SUM</option><option value="avg">AVG</option><option value="min">MIN</option><option value="max">MAX</option><option value="count">COUNT</option>`;
-    aggEl.value = 'sum';
-  } else {
-    aggEl.innerHTML = `<option value="count">COUNT</option>`;
-    aggEl.value = 'count';
+  if (smart && col && aggEl) {
+    if (detectColumnType(col) === 'metric') {
+      aggEl.innerHTML = `<option value="sum">SUM</option><option value="avg">AVG</option><option value="min">MIN</option><option value="max">MAX</option><option value="count">COUNT</option>`;
+      aggEl.value = 'sum';
+    } else {
+      aggEl.innerHTML = `<option value="count">COUNT</option>`;
+      aggEl.value = 'count';
+    }
   }
+  renderModalPreview();
 }
 
 export function handleLabelChange() {
   const smart = document.getElementById('smart-mode')?.checked;
-  if (!smart) return;
   const col = document.getElementById('m-label')?.value;
-  if (!col) return;
-  const unique = new Set(S.curData.map(r => r[col]));
-  if (unique.size > 15) {
-    alert('That column has ' + unique.size + ' distinct values — consider a table view or a column with fewer categories for a readable chart.');
+  if (smart && col) {
+    const unique = new Set(S.curData.map(r => r[col]));
+    if (unique.size > 15) {
+      alert('That column has ' + unique.size + ' distinct values — consider a table view or a column with fewer categories for a readable chart.');
+    }
   }
+  renderModalPreview();
 }
 
 export async function saveWidget() {
@@ -285,6 +325,7 @@ export async function saveWidget() {
   try {
     await api.createWidget({ name, chartType: S.selChart, sqlText: S.sqlText, labelCol, valCol, agg });
     S.modal = null;
+    S.pendingChartSuggestion = null;
     // Widget now owns this query — clear the editor so the builder starts fresh.
     S.sqlText = ''; S.curData = []; S.curCols = [];
     await go('dashboard');

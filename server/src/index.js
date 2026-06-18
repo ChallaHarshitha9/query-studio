@@ -11,6 +11,7 @@ const datasourceRoutes = require('./routes/datasources');
 const widgetRoutes = require('./routes/widgets');
 const savedQueryRoutes = require('./routes/savedQueries');
 const nlToSqlRoutes = require('./routes/nlToSql');
+const nlToChartRoutes = require('./routes/nlToChart');
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.use('/api', datasourceRoutes);
 app.use('/api', widgetRoutes);
 app.use('/api', savedQueryRoutes);
 app.use('/api', nlToSqlRoutes);
+app.use('/api', nlToChartRoutes);
 
 // Forces the browser to revalidate index.html/JS/CSS on every load instead
 // of serving a stale cached copy after a deploy (no cache-busting filenames

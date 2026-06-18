@@ -26,7 +26,9 @@ query-studio-fullstack/
         datasources.js   CSV upload -> real Postgres table, list/delete/download as CSV
         widgets.js       CRUD + rename for saved dashboard widgets (name + chart type + SQL)
         savedQueries.js  CRUD for saved queries (name + SQL text, reloadable from the sidebar)
-        nlToSql.js       POST /api/nl-to-sql — turns an English prompt into a SELECT query via GitHub Models
+        nlToSql.js       POST /api/nl-to-sql — turns an English prompt into a SQL statement via GitHub Models
+        nlToChart.js     POST /api/nl-to-chart — turns an English prompt into a SELECT + a suggested chart type/columns/agg
+      llm.js             shared GitHub Models client + schema-description + SQL-validation helpers used by both nlTo* routes
       sql/
         001_init.sql           app_users / widgets / datasources tables + demo schema seed data
         002_saved_queries.sql  saved_queries table
@@ -93,13 +95,30 @@ Visit `http://localhost:4000`, create an account, and start querying. The
 sidebar schema panel and "Data sources" page show the shared `demo` tables
 plus anything you upload as CSV.
 
-### 4. (Optional) Enable "Describe your query in English"
+### 4. (Optional) Enable the AI Assistant
 
-The query builder has a box where you type a request in plain English (e.g.
-"critical alarms by region in the last day") and it generates a SQL query for
-you to review and run. This calls [GitHub Models](https://github.com/marketplace/models),
-a free, rate-limited inference API — not GitHub Copilot itself, which has no
-public API for this kind of integration.
+There's a dedicated "AI Assistant" page (separate from the Query builder) with
+a box where you type a request in plain English. It calls
+[GitHub Models](https://github.com/marketplace/models), a free, rate-limited
+inference API — not GitHub Copilot itself, which has no public API for this
+kind of integration. Two buttons there do different things:
+
+- **Generate SQL** — writes any single PostgreSQL statement (SELECT, INSERT,
+  UPDATE, DELETE, CREATE TABLE, etc.) and only fills the SQL editor on the
+  Query builder page. **It never executes automatically**: you review it and
+  explicitly click Run, and the same schema-isolation and single-statement
+  checks in `routes/query.js` still apply at execution time no matter how the
+  SQL got into the editor (typed or generated). A generated query can still
+  modify or delete your own data, so read it before running it.
+- **Generate Chart** — designs an entire dashboard widget: it writes a
+  read-only SELECT (enforced server-side in `routes/nlToChart.js` — non-SELECT
+  output is rejected), runs it, and also picks a chart type plus label/value
+  columns and an aggregation function. It then opens the "Save as widget"
+  dialog with all of that pre-filled and a live chart preview, so you can
+  review, tweak, or override any of it before clicking "Add to dashboard" —
+  nothing is added to the dashboard without that explicit confirmation.
+
+To enable both:
 
 1. Go to GitHub → Settings → Developer settings → Personal access tokens →
    generate a token with read access to GitHub Models (the exact scope name
@@ -109,18 +128,8 @@ public API for this kind of integration.
 3. Restart the server.
 
 Everything else in the app works without this — it's an optional add-on. If
-`GITHUB_TOKEN` isn't set, that one feature returns a clear "not configured"
-error instead of breaking anything else.
-
-The model can generate any single PostgreSQL statement — SELECT, INSERT,
-UPDATE, DELETE, CREATE TABLE, etc. — not just SELECT, matching the fact that
-the query editor itself already allows full SQL within your own schema.
-**It never executes automatically**: it only fills the SQL editor for you to
-review and explicitly click Run, and the same schema-isolation and
-single-statement checks in `routes/query.js` still apply at execution time
-no matter how the SQL got into the editor (typed or generated). That means a
-generated query can still modify or delete your own data, so read it before
-running it — same as you would with any SQL you wrote by hand.
+`GITHUB_TOKEN` isn't set, both features return a clear "not configured" error
+instead of breaking anything else.
 
 ## Notable behavior changes vs. the original single-file prototype
 
@@ -130,3 +139,4 @@ running it — same as you would with any SQL you wrote by hand.
 - Queries can be saved independently of widgets (sidebar → "Saved queries") and reloaded into the editor later. Saving a query as a widget clears the editor afterward so the next query starts fresh.
 - The old "REST API endpoint" and "Database via backend proxy" data-source options were removed — the app itself is now that backend, talking to a real database directly.
 - Multi-user accounts (signup/login) were added; each account's tables, widgets, and saved queries are private to that account.
+- The English-to-SQL box moved off the Query builder page into its own "AI Assistant" page, and gained a second mode ("Generate Chart") that designs a full widget — SQL, chart type, label/value columns, and aggregation — instead of only the SQL text.

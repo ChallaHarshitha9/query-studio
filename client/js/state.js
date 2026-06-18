@@ -39,4 +39,7 @@ export const S = {
 
   // saved queries (distinct from widgets — just a name + SQL text to reload later)
   savedQueries: [], // [{id, name, sql_text, created_at}]
+
+  // AI-suggested widget config pending review in the save modal
+  pendingChartSuggestion: null, // {name, labelCol, valCol, agg} set by generateChart()
 };
