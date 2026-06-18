@@ -359,10 +359,10 @@ function renderConnect() {
 
 /* ── MODAL ──────────────────────────────────────────── */
 function labelFieldText(chartType) {
-  return ['pie', 'doughnut'].includes(chartType) ? 'Category column' : 'X axis (category)';
+  return ['pie', 'doughnut'].includes(chartType) ? 'Name column' : 'X axis (category)';
 }
 function valueFieldText(chartType) {
-  return chartType === 'kpi' ? 'Value column' : 'Y axis (value)';
+  return ['pie', 'doughnut'].includes(chartType) ? 'Value column' : chartType === 'kpi' ? 'Value column' : 'Y axis (value)';
 }
 
 function renderModal() {
@@ -371,7 +371,7 @@ function renderModal() {
     const sug = S.pendingChartSuggestion;
     const ct = S.selChart;
     const showLabel = !['table', 'kpi'].includes(ct);
-    const showValue = !['table', 'pie', 'doughnut'].includes(ct);
+    const showValue = ct !== 'table';
     const div = document.createElement('div');
     div.className = 'modal modal-wide';
     div.innerHTML = `
@@ -406,7 +406,7 @@ function renderModal() {
         </div>
         <div style="width:230px;flex-shrink:0">
           <label class="flabel">Preview</label>
-          <div class="modal-preview" id="m-preview-wrap"><canvas id="m-preview-cv" height="260"></canvas></div>
+          <div class="modal-preview" id="m-preview-wrap"><canvas id="m-preview-cv" style="width:100%;height:100%"></canvas></div>
         </div>
       </div>
       <div class="modal-actions">
@@ -425,7 +425,7 @@ export function applyModalFieldVisibility(chartType) {
   const valueLbl = document.getElementById('m-value-lbl');
   if (!labelWrap || !valueWrap) return;
   labelWrap.style.display = ['table', 'kpi'].includes(chartType) ? 'none' : '';
-  valueWrap.style.display = ['table', 'pie', 'doughnut'].includes(chartType) ? 'none' : '';
+  valueWrap.style.display = chartType === 'table' ? 'none' : '';
   if (labelLbl) labelLbl.textContent = labelFieldText(chartType);
   if (valueLbl) valueLbl.textContent = valueFieldText(chartType);
 }
@@ -436,10 +436,8 @@ export function renderModalPreview() {
   const chartType = S.selChart;
   const isPieType = ['pie', 'doughnut'].includes(chartType);
   const labelCol = document.getElementById('m-label')?.value;
-  // Pie/doughnut only expose a single "category column" dropdown — slices are
-  // a count of rows per category, so value column and aggregation don't apply.
-  const valCol = isPieType ? labelCol : document.getElementById('m-value')?.value;
-  const agg = isPieType ? 'count' : (document.getElementById('m-agg')?.value || 'count');
+  const valCol = document.getElementById('m-value')?.value;
+  const agg = document.getElementById('m-agg')?.value || 'count';
   const data = S.curData;
 
   if (chartType === 'table') {
@@ -454,7 +452,7 @@ export function renderModalPreview() {
     const vals = data.map(x => Number(x[valCol])).filter(v => !isNaN(v));
     const result = aggregate(agg, vals, data.length);
     const display = Number.isInteger(result) ? result.toLocaleString() : result.toFixed(2);
-    wrap.innerHTML = `<div class="kpi-card" style="padding:0">
+    wrap.innerHTML = `<div class="kpi-card" style="padding:0;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center">
       <div class="kpi-label">${agg.toUpperCase()} (${escHTML(valCol || '')})</div>
       <div class="kpi-value">${display}</div>
       <div class="kpi-sub">${data.length} row${data.length !== 1 ? 's' : ''}</div>
@@ -462,7 +460,7 @@ export function renderModalPreview() {
     return;
   }
 
-  wrap.innerHTML = '<canvas id="m-preview-cv" height="260"></canvas>';
+  wrap.innerHTML = '<canvas id="m-preview-cv" style="width:100%;height:100%"></canvas>';
   const cv = document.getElementById('m-preview-cv');
   if (!cv || !labelCol || !valCol || !data.length) return;
   const grouped = groupByLabel(data, labelCol, valCol);
@@ -489,7 +487,7 @@ export function renderModalPreview() {
       plugins: {
         legend: { display: isPieType, position: 'bottom', labels: { boxWidth: 8, font: { size: 9 }, padding: 6 } },
       },
-      scales: isPie ? {} : {
+      scales: isPieType ? {} : {
         x: { ticks: { font: { size: 9 }, maxRotation: 45 }, grid: { color: '#f0f1f3' } },
         y: { beginAtZero: true, ticks: { font: { size: 9 } }, grid: { color: '#f0f1f3' } },
       },

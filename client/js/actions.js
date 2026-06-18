@@ -325,12 +325,9 @@ export async function saveWidget() {
   let valCol = document.getElementById('m-value')?.value || S.curCols[1] || S.curCols[0];
   let agg = document.getElementById('m-agg')?.value || 'count';
 
-  // Pie/doughnut/kpi/table only expose the fields relevant to them (see
-  // applyModalFieldVisibility) — fill in the hidden ones with values that
-  // match what the preview actually rendered.
-  if (chartType === 'pie' || chartType === 'doughnut') {
-    valCol = labelCol; agg = 'count';
-  } else if (chartType === 'kpi') {
+  // kpi/table hide fields that don't apply to them (see
+  // applyModalFieldVisibility) — null those out rather than sending stale values.
+  if (chartType === 'kpi') {
     labelCol = null;
   } else if (chartType === 'table') {
     labelCol = null; valCol = null;

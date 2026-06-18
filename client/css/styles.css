@@ -148,7 +148,7 @@ table.rt tbody tr:hover td{background:#f5f7ff}
 .modal h3{font-size:15px;font-weight:700;margin-bottom:14px;color:var(--text)}
 .modal-actions{display:flex;gap:8px;margin-top:14px}
 .modal-actions .btn{flex:1;justify-content:center}
-.modal-preview{height:270px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);display:flex;align-items:center;justify-content:center;overflow:hidden;padding:6px}
+.modal-preview{height:270px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);position:relative;overflow:hidden;padding:6px;box-sizing:border-box}
 
 /* AUTH SCREEN */
 .auth-wrap{height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg)}
