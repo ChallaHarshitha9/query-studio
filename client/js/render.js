@@ -363,36 +363,41 @@ function renderModal() {
   if (S.modal === 'save') {
     const sug = S.pendingChartSuggestion;
     const div = document.createElement('div');
-    div.className = 'modal';
+    div.className = 'modal modal-wide';
     div.innerHTML = `
       <h3>Save as widget${sug ? ' <span style="font-size:10.5px;font-weight:500;color:var(--text3)">— AI suggested</span>' : ''}</h3>
-      <div class="field-g"><label class="flabel">Widget name</label>
-        <input class="finput" id="m-name" value="${escHTML(sug?.name || '')}" placeholder="e.g. Alerts by severity" autofocus/>
-      </div>
-      <div class="field-g" style="display:flex;align-items:center;gap:8px">
-        <label class="flabel" style="margin-bottom:0">Smart Mode</label>
-        <input type="checkbox" id="smart-mode" ${sug ? '' : 'checked'} style="width:15px;height:15px"/>
-      </div>
-      <div class="field-g">
-        <label class="flabel">Chart type</label>
-        <div class="chart-grid">
-          ${[{ t: 'pie', i: I.pie, l: 'Pie' }, { t: 'bar', i: I.bar, l: 'Bar' }, { t: 'line', i: I.line, l: 'Line' }, { t: 'doughnut', i: I.donut, l: 'Donut' }, { t: 'kpi', i: I.kpi, l: 'KPI' }, { t: 'table', i: I.rows, l: 'Table' }]
-            .map(c => `<button class="ct-btn ${S.selChart === c.t ? 'sel' : ''}" onclick="selChartType('${c.t}', event)">${c.i}${c.l}</button>`).join('')}
+      <div style="display:flex;gap:18px">
+        <div style="flex:1;min-width:0">
+          <div class="field-g"><label class="flabel">Widget name</label>
+            <input class="finput" id="m-name" value="${escHTML(sug?.name || '')}" placeholder="e.g. Alerts by severity" autofocus/>
+          </div>
+          <div class="field-g" style="display:flex;align-items:center;gap:8px">
+            <label class="flabel" style="margin-bottom:0">Smart Mode</label>
+            <input type="checkbox" id="smart-mode" ${sug ? '' : 'checked'} style="width:15px;height:15px"/>
+          </div>
+          <div class="field-g">
+            <label class="flabel">Chart type</label>
+            <div class="chart-grid">
+              ${[{ t: 'pie', i: I.pie, l: 'Pie' }, { t: 'bar', i: I.bar, l: 'Bar' }, { t: 'line', i: I.line, l: 'Line' }, { t: 'doughnut', i: I.donut, l: 'Donut' }, { t: 'kpi', i: I.kpi, l: 'KPI' }, { t: 'table', i: I.rows, l: 'Table' }]
+                .map(c => `<button class="ct-btn ${S.selChart === c.t ? 'sel' : ''}" onclick="selChartType('${c.t}', event)">${c.i}${c.l}</button>`).join('')}
+            </div>
+          </div>
+          <div class="field-g"><label class="flabel">Label column (X axis / category)</label>
+            <select class="finput" id="m-label" onchange="handleLabelChange()">${cols.map(c => `<option ${sug?.labelCol === c ? 'selected' : ''}>${escHTML(c)}</option>`).join('')}</select>
+          </div>
+          <div class="field-g"><label class="flabel">Value column (Y axis / metric)</label>
+            <div style="display:flex;gap:6px">
+              <select class="finput" id="m-value" style="flex:2" onchange="handleValueChange()">${cols.map((c, i) => `<option ${sug ? (sug.valCol === c ? 'selected' : '') : (i === 1 && cols.length > 1 ? 'selected' : '')}>${escHTML(c)}</option>`).join('')}</select>
+              <select class="finput" id="m-agg" onchange="updateModalPreview()" style="flex:1">
+                ${['count', 'sum', 'avg', 'min', 'max'].map(a => `<option value="${a}" ${(sug?.agg || 'count') === a ? 'selected' : ''}>${a.toUpperCase()}</option>`).join('')}
+              </select>
+            </div>
+          </div>
         </div>
-      </div>
-      <div class="field-g"><label class="flabel">Label column (X axis / category)</label>
-        <select class="finput" id="m-label" onchange="handleLabelChange()">${cols.map(c => `<option ${sug?.labelCol === c ? 'selected' : ''}>${escHTML(c)}</option>`).join('')}</select>
-      </div>
-      <div class="field-g"><label class="flabel">Value column (Y axis / metric)</label>
-        <div style="display:flex;gap:6px">
-          <select class="finput" id="m-value" style="flex:2" onchange="handleValueChange()">${cols.map((c, i) => `<option ${sug ? (sug.valCol === c ? 'selected' : '') : (i === 1 && cols.length > 1 ? 'selected' : '')}>${escHTML(c)}</option>`).join('')}</select>
-          <select class="finput" id="m-agg" onchange="updateModalPreview()" style="flex:1">
-            ${['count', 'sum', 'avg', 'min', 'max'].map(a => `<option value="${a}" ${(sug?.agg || 'count') === a ? 'selected' : ''}>${a.toUpperCase()}</option>`).join('')}
-          </select>
+        <div style="width:230px;flex-shrink:0">
+          <label class="flabel">Preview</label>
+          <div class="modal-preview" id="m-preview-wrap"><canvas id="m-preview-cv" height="260"></canvas></div>
         </div>
-      </div>
-      <div class="field-g"><label class="flabel">Preview</label>
-        <div class="modal-preview" id="m-preview-wrap"><canvas id="m-preview-cv" height="140"></canvas></div>
       </div>
       <div class="modal-actions">
         <button class="btn primary" onclick="saveWidget()">Add to dashboard</button>
@@ -432,7 +437,7 @@ export function renderModalPreview() {
     return;
   }
 
-  wrap.innerHTML = '<canvas id="m-preview-cv" height="140"></canvas>';
+  wrap.innerHTML = '<canvas id="m-preview-cv" height="260"></canvas>';
   const cv = document.getElementById('m-preview-cv');
   if (!cv || !labelCol || !valCol || !data.length) return;
   const grouped = groupByLabel(data, labelCol, valCol);
