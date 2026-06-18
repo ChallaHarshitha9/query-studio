@@ -33,6 +33,7 @@ query-studio-fullstack/
         001_init.sql           app_users / widgets / datasources tables + demo schema seed data
         002_saved_queries.sql  saved_queries table
         003_widget_agg.sql     widgets.agg column (count/sum/avg/min/max)
+        004_widget_data.sql    widgets.data column (JSONB snapshot of the query result at save time)
   client/
     index.html
     css/styles.css
@@ -135,7 +136,7 @@ instead of breaking anything else.
 
 - SQL now runs against real PostgreSQL instead of an in-browser SQLite (sql.js) instance.
 - CSV upload is parsed and loaded server-side into the uploader's own schema, instead of client-side into in-memory SQLite — uploaded tables persist across sessions/restarts, and can be re-downloaded as CSV from the Data Sources page.
-- Dashboard widgets persist in Postgres and re-run their saved SQL each time you open the Dashboard tab, so they always show live data. Widgets can be renamed in place from the dashboard.
+- Dashboard widgets persist in Postgres as a snapshot of the table produced by the query at save time (`widgets.data`, a JSONB column) — opening the Dashboard tab renders straight from that snapshot instead of re-running the query. The original SQL is still stored alongside it (`sql_text`) so the explicit Refresh button and auto-refresh can re-run it on demand to pull live data. Widgets can be renamed in place from the dashboard.
 - Queries can be saved independently of widgets (sidebar → "Saved queries") and reloaded into the editor later. Saving a query as a widget clears the editor afterward so the next query starts fresh.
 - The old "REST API endpoint" and "Database via backend proxy" data-source options were removed — the app itself is now that backend, talking to a real database directly.
 - Multi-user accounts (signup/login) were added; each account's tables, widgets, and saved queries are private to that account.

@@ -358,10 +358,20 @@ function renderConnect() {
 }
 
 /* ── MODAL ──────────────────────────────────────────── */
+function labelFieldText(chartType) {
+  return ['pie', 'doughnut'].includes(chartType) ? 'Category column' : 'X axis (category)';
+}
+function valueFieldText(chartType) {
+  return chartType === 'kpi' ? 'Value column' : 'Y axis (value)';
+}
+
 function renderModal() {
   const cols = S.curCols;
   if (S.modal === 'save') {
     const sug = S.pendingChartSuggestion;
+    const ct = S.selChart;
+    const showLabel = !['table', 'kpi'].includes(ct);
+    const showValue = !['table', 'pie', 'doughnut'].includes(ct);
     const div = document.createElement('div');
     div.className = 'modal modal-wide';
     div.innerHTML = `
@@ -382,10 +392,10 @@ function renderModal() {
                 .map(c => `<button class="ct-btn ${S.selChart === c.t ? 'sel' : ''}" onclick="selChartType('${c.t}', event)">${c.i}${c.l}</button>`).join('')}
             </div>
           </div>
-          <div class="field-g"><label class="flabel">Label column (X axis / category)</label>
+          <div class="field-g" id="m-label-wrap" style="${showLabel ? '' : 'display:none'}"><label class="flabel" id="m-label-lbl">${labelFieldText(ct)}</label>
             <select class="finput" id="m-label" onchange="handleLabelChange()">${cols.map(c => `<option ${sug?.labelCol === c ? 'selected' : ''}>${escHTML(c)}</option>`).join('')}</select>
           </div>
-          <div class="field-g"><label class="flabel">Value column (Y axis / metric)</label>
+          <div class="field-g" id="m-value-wrap" style="${showValue ? '' : 'display:none'}"><label class="flabel" id="m-value-lbl">${valueFieldText(ct)}</label>
             <div style="display:flex;gap:6px">
               <select class="finput" id="m-value" style="flex:2" onchange="handleValueChange()">${cols.map((c, i) => `<option ${sug ? (sug.valCol === c ? 'selected' : '') : (i === 1 && cols.length > 1 ? 'selected' : '')}>${escHTML(c)}</option>`).join('')}</select>
               <select class="finput" id="m-agg" onchange="updateModalPreview()" style="flex:1">
@@ -408,13 +418,28 @@ function renderModal() {
   return document.createElement('div');
 }
 
+export function applyModalFieldVisibility(chartType) {
+  const labelWrap = document.getElementById('m-label-wrap');
+  const valueWrap = document.getElementById('m-value-wrap');
+  const labelLbl = document.getElementById('m-label-lbl');
+  const valueLbl = document.getElementById('m-value-lbl');
+  if (!labelWrap || !valueWrap) return;
+  labelWrap.style.display = ['table', 'kpi'].includes(chartType) ? 'none' : '';
+  valueWrap.style.display = ['table', 'pie', 'doughnut'].includes(chartType) ? 'none' : '';
+  if (labelLbl) labelLbl.textContent = labelFieldText(chartType);
+  if (valueLbl) valueLbl.textContent = valueFieldText(chartType);
+}
+
 export function renderModalPreview() {
   const wrap = document.getElementById('m-preview-wrap');
   if (!wrap) return;
   const chartType = S.selChart;
+  const isPieType = ['pie', 'doughnut'].includes(chartType);
   const labelCol = document.getElementById('m-label')?.value;
-  const valCol = document.getElementById('m-value')?.value;
-  const agg = document.getElementById('m-agg')?.value || 'count';
+  // Pie/doughnut only expose a single "category column" dropdown — slices are
+  // a count of rows per category, so value column and aggregation don't apply.
+  const valCol = isPieType ? labelCol : document.getElementById('m-value')?.value;
+  const agg = isPieType ? 'count' : (document.getElementById('m-agg')?.value || 'count');
   const data = S.curData;
 
   if (chartType === 'table') {
@@ -446,14 +471,13 @@ export function renderModalPreview() {
     const g = grouped.get(label);
     return aggregate(agg, g.values, g.count);
   });
-  const isPie = ['pie', 'doughnut'].includes(chartType);
   new Chart(cv, {
     type: chartType,
     data: {
       labels,
       datasets: [{
         data: values,
-        backgroundColor: isPie ? PAL.slice(0, labels.length) : PAL[0],
+        backgroundColor: isPieType ? PAL.slice(0, labels.length) : PAL[0],
         borderColor: 'transparent',
         borderRadius: chartType === 'bar' ? 4 : 0,
         tension: 0.4, fill: false, pointRadius: 3,
@@ -463,7 +487,7 @@ export function renderModalPreview() {
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
-        legend: { display: isPie, position: 'bottom', labels: { boxWidth: 8, font: { size: 9 }, padding: 6 } },
+        legend: { display: isPieType, position: 'bottom', labels: { boxWidth: 8, font: { size: 9 }, padding: 6 } },
       },
       scales: isPie ? {} : {
         x: { ticks: { font: { size: 9 }, maxRotation: 45 }, grid: { color: '#f0f1f3' } },

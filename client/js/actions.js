@@ -1,6 +1,6 @@
 import { api, getToken, setToken, clearToken } from './api.js';
 import { S, MAX_MB } from './state.js';
-import { render, buildVisualSQL, setSt, renderModalPreview } from './render.js';
+import { render, buildVisualSQL, setSt, renderModalPreview, applyModalFieldVisibility } from './render.js';
 
 /* ── BOOT / AUTH ────────────────────────────────────── */
 export async function boot() {
@@ -274,6 +274,7 @@ export function selChartType(t, evt) {
   S.selChart = t;
   document.querySelectorAll('.ct-btn').forEach(b => b.classList.remove('sel'));
   evt.currentTarget.classList.add('sel');
+  applyModalFieldVisibility(t);
   renderModalPreview();
 }
 export function updateModalPreview() { renderModalPreview(); }
@@ -319,11 +320,26 @@ export function handleLabelChange() {
 
 export async function saveWidget() {
   const name = document.getElementById('m-name')?.value?.trim() || 'Widget ' + new Date().toLocaleTimeString();
-  const labelCol = document.getElementById('m-label')?.value || S.curCols[0];
-  const valCol = document.getElementById('m-value')?.value || S.curCols[1] || S.curCols[0];
-  const agg = document.getElementById('m-agg')?.value || 'count';
+  const chartType = S.selChart;
+  let labelCol = document.getElementById('m-label')?.value || S.curCols[0];
+  let valCol = document.getElementById('m-value')?.value || S.curCols[1] || S.curCols[0];
+  let agg = document.getElementById('m-agg')?.value || 'count';
+
+  // Pie/doughnut/kpi/table only expose the fields relevant to them (see
+  // applyModalFieldVisibility) — fill in the hidden ones with values that
+  // match what the preview actually rendered.
+  if (chartType === 'pie' || chartType === 'doughnut') {
+    valCol = labelCol; agg = 'count';
+  } else if (chartType === 'kpi') {
+    labelCol = null;
+  } else if (chartType === 'table') {
+    labelCol = null; valCol = null;
+  }
+
   try {
-    await api.createWidget({ name, chartType: S.selChart, sqlText: S.sqlText, labelCol, valCol, agg });
+    // Widgets render from this snapshot of the already-fetched table, not
+    // by re-running sqlText — sqlText is kept only as reference metadata.
+    await api.createWidget({ name, chartType, sqlText: S.sqlText, labelCol, valCol, agg, data: S.curData });
     S.modal = null;
     S.pendingChartSuggestion = null;
     // Widget now owns this query — clear the editor so the builder starts fresh.
@@ -353,23 +369,35 @@ export async function renameWidget(id) {
 export async function loadWidgetsData() {
   try {
     const { widgets } = await api.listWidgets();
-    const withData = await Promise.all(widgets.map(async w => {
-      try {
-        const { rows } = await api.runQuery(w.sql_text);
-        return { ...w, data: rows, cols: rows.length ? Object.keys(rows[0]) : [] };
-      } catch {
-        return { ...w, data: [], cols: [] };
-      }
-    }));
-    S.widgets = withData;
+    // Widgets render from the data snapshot saved at creation time, not by
+    // re-running sql_text against the database on every Dashboard visit.
+    S.widgets = widgets.map(w => {
+      const rows = w.data || [];
+      return { ...w, data: rows, cols: rows.length ? Object.keys(rows[0]) : [] };
+    });
     S.dashboardUpdatedAt = new Date();
   } catch (err) {
     setSt('Could not load widgets: ' + err.message, 'err');
   }
 }
 
+// Unlike loadWidgetsData(), this explicitly re-runs each widget's original
+// query against the database — used by the Refresh button and auto-refresh
+// timer, which are meant to pull live data, not just reload the snapshot.
 export async function refreshDashboard() {
-  await loadWidgetsData();
+  try {
+    S.widgets = await Promise.all(S.widgets.map(async w => {
+      try {
+        const { rows } = await api.runQuery(w.sql_text);
+        return { ...w, data: rows, cols: rows.length ? Object.keys(rows[0]) : [] };
+      } catch {
+        return w; // keep the last good data if the query now fails
+      }
+    }));
+    S.dashboardUpdatedAt = new Date();
+  } catch (err) {
+    setSt('Could not refresh widgets: ' + err.message, 'err');
+  }
   render();
 }
 
