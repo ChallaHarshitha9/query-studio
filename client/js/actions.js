@@ -121,6 +121,25 @@ export function insertSnip(s) {
   ta.selectionStart = ta.selectionEnd = p + s.length + 1;
 }
 
+/* ── NATURAL LANGUAGE → SQL ──────────────────────────── */
+export async function generateSQL() {
+  const input = document.getElementById('nl-prompt');
+  const prompt = input?.value.trim();
+  if (!prompt) { setSt('Describe what you want first', 'err'); return; }
+
+  setSt('Generating SQL...', 'run');
+  try {
+    const { sql } = await api.nlToSql(prompt);
+    S.sqlText = sql;
+    S.isVisual = false;
+    S.curData = []; S.curCols = [];
+    setSt('SQL generated — review it, then click Run', 'ok');
+  } catch (err) {
+    setSt('Could not generate SQL: ' + err.message, 'err');
+  }
+  render();
+}
+
 /* ── QUERY EXECUTION ────────────────────────────────── */
 export async function runQuery() {
   const ta = document.getElementById('sql-ta');

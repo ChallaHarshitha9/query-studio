@@ -26,9 +26,11 @@ query-studio-fullstack/
         datasources.js   CSV upload -> real Postgres table, list/delete/download as CSV
         widgets.js       CRUD + rename for saved dashboard widgets (name + chart type + SQL)
         savedQueries.js  CRUD for saved queries (name + SQL text, reloadable from the sidebar)
+        nlToSql.js       POST /api/nl-to-sql — turns an English prompt into a SELECT query via GitHub Models
       sql/
         001_init.sql           app_users / widgets / datasources tables + demo schema seed data
         002_saved_queries.sql  saved_queries table
+        003_widget_agg.sql     widgets.agg column (count/sum/avg/min/max)
   client/
     index.html
     css/styles.css
@@ -90,6 +92,27 @@ to apply migrations manually without starting the server.
 Visit `http://localhost:4000`, create an account, and start querying. The
 sidebar schema panel and "Data sources" page show the shared `demo` tables
 plus anything you upload as CSV.
+
+### 4. (Optional) Enable "Describe your query in English"
+
+The query builder has a box where you type a request in plain English (e.g.
+"critical alarms by region in the last day") and it generates a SQL query for
+you to review and run. This calls [GitHub Models](https://github.com/marketplace/models),
+a free, rate-limited inference API — not GitHub Copilot itself, which has no
+public API for this kind of integration.
+
+1. Go to GitHub → Settings → Developer settings → Personal access tokens →
+   generate a token with read access to GitHub Models (the exact scope name
+   may vary — check the current GitHub Models docs, since GitHub has changed
+   this a few times).
+2. Set it as `GITHUB_TOKEN` in `server/.env`.
+3. Restart the server.
+
+Everything else in the app works without this — it's an optional add-on. If
+`GITHUB_TOKEN` isn't set, that one feature returns a clear "not configured"
+error instead of breaking anything else. The model only ever generates a
+single `SELECT` statement (enforced server-side) — it cannot be used to run
+inserts/updates/deletes, regardless of what the prompt asks for.
 
 ## Notable behavior changes vs. the original single-file prototype
 

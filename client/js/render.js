@@ -140,6 +140,13 @@ function renderBuilder() {
       <button class="btn primary" onclick="runQuery()">${I.play} Run</button>
     </div>
     <div class="content">
+      <div class="panel">
+        <div class="phdr">${I.bookmark} Describe your query in English</div>
+        <div style="display:flex;gap:8px;padding:10px 12px">
+          <input class="finput" id="nl-prompt" style="flex:1" placeholder="e.g. critical alarms by region in the last day" onkeydown="if(event.key==='Enter'){generateSQL()}"/>
+          <button class="btn primary" onclick="generateSQL()">${I.play} Generate SQL</button>
+        </div>
+      </div>
       ${!S.isVisual ? `
       <div class="panel">
         <div class="phdr">${I.code} SQL editor</div>

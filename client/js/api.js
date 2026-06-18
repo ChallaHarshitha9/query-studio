@@ -64,4 +64,6 @@ export const api = {
   listSavedQueries: () => request('/saved-queries'),
   createSavedQuery: (name, sqlText) => request('/saved-queries', { method: 'POST', body: { name, sqlText } }),
   removeSavedQuery: (id) => request(`/saved-queries/${id}`, { method: 'DELETE' }),
+
+  nlToSql: (prompt) => request('/nl-to-sql', { method: 'POST', body: { prompt } }),
 };
